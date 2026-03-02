@@ -81,6 +81,7 @@ function canSendMessage() {
 export default function WidgetPage() {
   const searchParams = useSearchParams();
   const tenantId = searchParams.get("tenant") ?? "";
+  const token = searchParams.get("token") ?? "";
   const [authorized, setAuthorized] = useState(false);
   const [statusMessage, setStatusMessage] = useState("Checking domain...");
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -147,39 +148,44 @@ export default function WidgetPage() {
   );
 
   useEffect(() => {
-    const verifyDomain = async () => {
+    const verifyToken = async () => {
+      if (!tenantId) {
+        setAuthorized(false);
+        setStatusMessage("Missing tenant ID.");
+        return;
+      }
+
+      if (!token) {
+        setAuthorized(false);
+        setStatusMessage("Missing authorization token.");
+        return;
+      }
+
       try {
-        const referrer = document.referrer;
         const response = await fetch(
-          `/api/tenant/authorize?tenant=${encodeURIComponent(
+          `/api/tenant/verify-token?tenant=${encodeURIComponent(
             tenantId
-          )}&referrer=${encodeURIComponent(referrer)}`
+          )}&token=${encodeURIComponent(token)}`
         );
         const data = (await response.json()) as {
-          authorized: boolean;
+          valid: boolean;
           message?: string;
         };
-        if (data.authorized) {
+        if (data.valid) {
           setAuthorized(true);
           setStatusMessage("");
         } else {
           setAuthorized(false);
-          setStatusMessage(data.message ?? "Unauthorized domain.");
+          setStatusMessage(data.message ?? "Unauthorized.");
         }
       } catch {
         setAuthorized(false);
-        setStatusMessage("Unable to verify domain.");
+        setStatusMessage("Unable to verify authorization.");
       }
     };
 
-    if (!tenantId) {
-      setAuthorized(false);
-      setStatusMessage("Missing tenant ID.");
-      return;
-    }
-
-    verifyDomain();
-  }, [tenantId]);
+    verifyToken();
+  }, [tenantId, token]);
 
   useEffect(() => {
     if (!authorized || !tenantId || !supabase) return;
