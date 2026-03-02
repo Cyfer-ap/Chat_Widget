@@ -148,6 +148,14 @@ export default function WidgetPage() {
   );
 
   useEffect(() => {
+    // Ensure the iframe document stays transparent; only the widget panel
+    // should be visible when open.
+    document.documentElement.style.background = "transparent";
+    document.body.style.background = "transparent";
+    document.body.style.backgroundImage = "none";
+  }, []);
+
+  useEffect(() => {
     const verifyToken = async () => {
       if (!tenantId) {
         setAuthorized(false);
@@ -544,10 +552,14 @@ export default function WidgetPage() {
   }
 
   return (
-    <div className="h-screen w-screen bg-transparent">
-      <div className="fixed bottom-4 right-4 flex flex-col items-end gap-2">
+    <div className={open ? "h-screen w-screen bg-transparent" : "pointer-events-none"}>
+      <div
+        className={`fixed bottom-4 right-4 flex flex-col items-end gap-2 ${
+          open ? "pointer-events-auto" : "pointer-events-none"
+        }`}
+      >
         {open ? (
-          <div className="flex h-[70vh] w-[90vw] max-w-[360px] flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] shadow-2xl ring-1 ring-black/5 sm:h-[480px] sm:w-[320px]">
+          <div className="pointer-events-auto flex h-[70vh] w-[90vw] max-w-[360px] flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] shadow-2xl ring-1 ring-black/5 sm:h-[480px] sm:w-[320px]">
             <div className="flex items-center justify-between bg-gradient-to-r from-[color:var(--primary)] to-zinc-800 px-4 py-3 text-[color:var(--primary-foreground)]">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold">Live support</span>
@@ -777,7 +789,7 @@ export default function WidgetPage() {
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
-          className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-[color:var(--primary)] to-zinc-700 text-sm font-semibold text-[color:var(--primary-foreground)] shadow-lg ring-1 ring-black/10 transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          className="pointer-events-auto relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-[color:var(--primary)] to-zinc-700 text-sm font-semibold text-[color:var(--primary-foreground)] shadow-lg ring-1 ring-black/10 transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
           aria-label={open ? "Close chat" : "Open chat"}
           aria-expanded={open}
         >
