@@ -58,6 +58,11 @@ create policy "Agents can update conversations"
     select 1 from agents
     where agents.tenant_id = conversations.tenant_id
       and agents.user_id = auth.uid()
+  ))
+  with check (exists (
+    select 1 from agents
+    where agents.tenant_id = conversations.tenant_id
+      and agents.user_id = auth.uid()
   ));
 
 create policy "Agents can read messages"
@@ -70,11 +75,18 @@ create policy "Agents can read messages"
 
 create policy "Agents can insert messages"
   on messages for insert
-  with check (exists (
-    select 1 from agents
-    where agents.tenant_id = messages.tenant_id
-      and agents.user_id = auth.uid()
-  ));
+  with check (
+    exists (
+      select 1 from agents
+      where agents.tenant_id = messages.tenant_id
+        and agents.user_id = auth.uid()
+    )
+    and exists (
+      select 1 from conversations
+      where conversations.id = messages.conversation_id
+        and conversations.tenant_id = messages.tenant_id
+    )
+  );
 
 create policy "Visitors can read their visitor record"
   on visitors for select
@@ -86,38 +98,50 @@ create policy "Visitors can insert their visitor record"
 
 create policy "Visitors can insert conversations"
   on conversations for insert
-  with check (exists (
-    select 1
-    from visitors
-    where visitors.id = conversations.visitor_id
-      and visitors.anon_id = auth.uid()::text
-  ));
+  with check (
+    exists (
+      select 1
+      from visitors
+      where visitors.id = conversations.visitor_id
+        and visitors.anon_id = auth.uid()::text
+        and visitors.tenant_id = conversations.tenant_id
+    )
+  );
 
 create policy "Visitors can read their conversations"
   on conversations for select
-  using (exists (
-    select 1
-    from visitors
-    where visitors.id = conversations.visitor_id
-      and visitors.anon_id = auth.uid()::text
-  ));
+  using (
+    exists (
+      select 1
+      from visitors
+      where visitors.id = conversations.visitor_id
+        and visitors.anon_id = auth.uid()::text
+        and visitors.tenant_id = conversations.tenant_id
+    )
+  );
 
 create policy "Visitors can read their messages"
   on messages for select
-  using (exists (
-    select 1
-    from conversations
-    join visitors on visitors.id = conversations.visitor_id
-    where conversations.id = messages.conversation_id
-      and visitors.anon_id = auth.uid()::text
-  ));
+  using (
+    exists (
+      select 1
+      from conversations
+      join visitors on visitors.id = conversations.visitor_id
+      where conversations.id = messages.conversation_id
+        and conversations.tenant_id = messages.tenant_id
+        and visitors.anon_id = auth.uid()::text
+    )
+  );
 
 create policy "Visitors can insert messages"
   on messages for insert
-  with check (exists (
-    select 1
-    from conversations
-    join visitors on visitors.id = conversations.visitor_id
-    where conversations.id = messages.conversation_id
-      and visitors.anon_id = auth.uid()::text
-  ));
+  with check (
+    exists (
+      select 1
+      from conversations
+      join visitors on visitors.id = conversations.visitor_id
+      where conversations.id = messages.conversation_id
+        and conversations.tenant_id = messages.tenant_id
+        and visitors.anon_id = auth.uid()::text
+    )
+  );
