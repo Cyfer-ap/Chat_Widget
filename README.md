@@ -89,6 +89,12 @@ The script creates a fixed bottom-right iframe. It reads `document.referrer` and
 
 ---
 
+## Embedding security headers
+
+The `/widget` route emits a dynamic `Content-Security-Policy` header with a `frame-ancestors` directive derived from the signed widget token. If the token is missing or invalid, the policy falls back to `frame-ancestors 'none'` to prevent embedding.
+
+---
+
 ## Features
 
 ### Widget (visitor side)
@@ -194,6 +200,7 @@ All tables carry `tenant_id` for multi-tenant isolation.
 npm run dev     # start dev server
 npm run build   # production build
 npm run lint    # ESLint check
+npm run test    # Node test runner
 ```
 
 ---

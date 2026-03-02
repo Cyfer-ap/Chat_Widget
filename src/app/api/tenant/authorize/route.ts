@@ -95,7 +95,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const token = await signWidgetToken(tenantId, hostname);
+  const token = await signWidgetToken(tenantId, originHeader);
 
   return NextResponse.json(
     { authorized: true, message: "", token },
