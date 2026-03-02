@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dynamic Chat Widget
 
-## Getting Started
+Copy-paste live chat widget for any website plus an agent dashboard to reply in realtime.
 
-First, run the development server:
+## What is included
 
-```bash
+- Widget UI at `/widget` (iframe-friendly)
+- Agent login at `/login`
+- Inbox at `/dashboard`
+- Conversation view at `/dashboard/conversations/[id]`
+- Embed loader script at `/public/widget.js`
+- Supabase schema + RLS policies under `/supabase`
+
+## Quick start
+
+1) Install dependencies (already done if you used `create-next-app`).
+2) Create a Supabase project and apply the SQL in `/supabase/migrations/0001_init.sql`.
+3) Apply `/supabase/rls.sql` and enable Realtime on the `messages` table.
+4) Create a demo tenant using `/supabase/seed.sql`.
+5) Add environment variables (see below).
+6) Run the dev server.
+
+```powershell
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create `.env.local`:
 
-## Learn More
+```env
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Widget embed snippet
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```html
+<script
+  src="https://your-app.com/widget.js"
+  data-tenant="YOUR_TENANT_ID"
+  data-host="https://your-app.com"
+  data-title="Live support"
+  data-width="360"
+  data-height="600"
+></script>
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Supabase notes
 
-## Deploy on Vercel
+- Every table is tenant-scoped with `tenant_id`.
+- RLS policies in `/supabase/rls.sql` assume:
+  - Agents are mapped in the `agents` table to `auth.users`.
+  - Visitors sign in anonymously; their Supabase `auth.uid()` is stored in `visitors.anon_id`.
+- For MVP testing, you can temporarily disable RLS or use the service role key for server-side checks.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Development scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```powershell
+npm run lint
+```
+
+## Known MVP trade-offs
+
+- Rate limiting is a client-side throttle (see `src/app/widget/page.tsx`).
+- Domain allowlist is enforced via `/api/tenant/authorize` with the service role key.
+- Agent assignment and presence are not yet implemented.
