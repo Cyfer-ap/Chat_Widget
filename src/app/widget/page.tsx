@@ -7,7 +7,6 @@ import type { Conversation, Message } from "@/lib/types";
 import ThemeToggle from "@/components/ThemeToggle";
 
 const ANON_STORAGE_KEY = "chat_widget_anon_id";
-const RATE_LIMIT_KEY = "chat_widget_rate_limit";
 const WIDGET_LAST_READ_KEY = "chat_widget_last_read_at";
 const NEW_TICKET_AFTER_DAYS = 14;
 const REOPEN_WINDOW_DAYS = 7;
@@ -54,30 +53,6 @@ function appendMessage(
   );
 }
 
-function canSendMessage() {
-  const now = Date.now();
-  const raw = localStorage.getItem(RATE_LIMIT_KEY);
-  const windowMs = 60_000;
-  const maxCount = 8;
-
-  const record = raw ? (JSON.parse(raw) as { start: number; count: number }) : null;
-  if (!record || now - record.start > windowMs) {
-    localStorage.setItem(
-      RATE_LIMIT_KEY,
-      JSON.stringify({ start: now, count: 1 })
-    );
-    return true;
-  }
-
-  if (record.count >= maxCount) return false;
-
-  localStorage.setItem(
-    RATE_LIMIT_KEY,
-    JSON.stringify({ start: record.start, count: record.count + 1 })
-  );
-  return true;
-}
-
 export default function WidgetPage() {
   const searchParams = useSearchParams();
   const tenantId = searchParams.get("tenant") ?? "";
@@ -111,6 +86,7 @@ export default function WidgetPage() {
     ReturnType<NonNullable<ReturnType<typeof getSupabaseClient>>["channel"]> | null
   >(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef(0);
 
   const isViewingPrevious = Boolean(viewingConversationId);
@@ -472,13 +448,13 @@ export default function WidgetPage() {
     event.preventDefault();
     if (!conversationId || !body.trim() || isViewingPrevious) return;
 
-    if (!canSendMessage()) {
-      setStatusMessage("Please wait a minute before sending more messages.");
+    if (!supabase) {
+      setStatusMessage("Missing Supabase environment variables.");
       return;
     }
 
-    if (!supabase) {
-      setStatusMessage("Missing Supabase environment variables.");
+    if (!visitorId) {
+      setStatusMessage("Missing visitor session.");
       return;
     }
 
@@ -511,25 +487,47 @@ export default function WidgetPage() {
     setBody("");
     setSending(true);
 
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({
-        tenant_id: tenantId,
-        conversation_id: targetConversationId,
-        sender_type: "visitor",
-        body: nextBody,
-      })
-      .select("id, tenant_id, conversation_id, sender_type, body, created_at")
-      .single();
+    try {
+      const response = await fetch("/api/messages/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          token,
+          tenant_id: tenantId,
+          conversation_id: targetConversationId,
+          visitor_id: visitorId,
+          sender_type: "visitor",
+          body: nextBody,
+        }),
+      });
 
-    if (error) {
-      setStatusMessage(error.message);
+      const responseData = (await response.json()) as {
+        data?: Message;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setStatusMessage(responseData.error ?? "Unable to send message.");
+        if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+        statusTimeoutRef.current = setTimeout(() => {
+          setStatusMessage("");
+        }, 2000);
+        setSending(false);
+        return;
+      }
+
+      if (responseData.data) appendMessage(setMessages, responseData.data);
       setSending(false);
-      return;
+    } catch {
+      setStatusMessage("Unable to send message.");
+      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+      statusTimeoutRef.current = setTimeout(() => {
+        setStatusMessage("");
+      }, 2000);
+      setSending(false);
     }
-
-    if (data) appendMessage(setMessages, data);
-    setSending(false);
   };
 
   const handleViewConversation = (conversation: Conversation) => {

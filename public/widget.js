@@ -9,13 +9,11 @@
   }
 
   const title = currentScript.getAttribute("data-title") || "Live support";
-  const host = currentScript.getAttribute("data-host") || "";
+  const host = currentScript.getAttribute("data-host") || new URL(currentScript.src).origin;
   const width = currentScript.getAttribute("data-width") || "360";
   const height = currentScript.getAttribute("data-height") || "600";
 
-  const srcBase = host || window.location.origin;
-
-  fetch(`${srcBase}/api/tenant/authorize?tenant=${encodeURIComponent(tenantId)}`)
+  fetch(`${host}/api/tenant/authorize?tenant=${encodeURIComponent(tenantId)}`)
     .then((response) => response.json())
     .then((data) => {
       if (!data.authorized || !data.token) {
@@ -24,7 +22,7 @@
       }
 
       const iframe = document.createElement("iframe");
-      iframe.src = `${srcBase}/widget?tenant=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(data.token)}`;
+      iframe.src = `${host}/widget?tenant=${encodeURIComponent(tenantId)}&token=${encodeURIComponent(data.token)}`;
       iframe.title = title;
       iframe.style.position = "fixed";
       iframe.style.bottom = "0";

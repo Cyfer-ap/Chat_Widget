@@ -36,7 +36,7 @@ export default function Home() {
           <p>
             Embed snippet:
             <code className="mt-2 block rounded bg-zinc-100 p-3 text-xs text-zinc-700">
-              {`<script src="https://your-app.com/widget.js" data-tenant="YOUR_TENANT_ID" data-host="https://your-app.com"></script>`}
+:               {`<script src="https://your-app.com/widget.js" data-tenant="YOUR_TENANT_ID" data-host="https://your-app.com"></script>`}
             </code>
           </p>
         </div>
