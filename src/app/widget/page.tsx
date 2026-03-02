@@ -56,7 +56,8 @@ function appendMessage(
 export default function WidgetPage() {
   const searchParams = useSearchParams();
   const tenantId = searchParams.get("tenant") ?? "";
-  const token = searchParams.get("token") ?? "";
+  const initialToken = searchParams.get("token") ?? "";
+  const [widgetToken, setWidgetToken] = useState(initialToken);
   const [authorized, setAuthorized] = useState(false);
   const [statusMessage, setStatusMessage] = useState("Checking domain...");
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -132,6 +133,18 @@ export default function WidgetPage() {
   }, []);
 
   useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (!event.data || event.data.type !== "widget-token") return;
+      if (event.data.tenant && event.data.tenant !== tenantId) return;
+      if (typeof event.data.token !== "string" || !event.data.token) return;
+      setWidgetToken(event.data.token);
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [tenantId]);
+
+  useEffect(() => {
     const verifyToken = async () => {
       if (!tenantId) {
         setAuthorized(false);
@@ -139,7 +152,7 @@ export default function WidgetPage() {
         return;
       }
 
-      if (!token) {
+      if (!widgetToken) {
         setAuthorized(false);
         setStatusMessage("Missing authorization token.");
         return;
@@ -149,7 +162,7 @@ export default function WidgetPage() {
         const response = await fetch(
           `/api/tenant/verify-token?tenant=${encodeURIComponent(
             tenantId
-          )}&token=${encodeURIComponent(token)}`
+          )}&token=${encodeURIComponent(widgetToken)}`
         );
         const data = (await response.json()) as {
           valid: boolean;
@@ -169,7 +182,7 @@ export default function WidgetPage() {
     };
 
     verifyToken();
-  }, [tenantId, token]);
+  }, [tenantId, widgetToken]);
 
   useEffect(() => {
     if (!authorized || !tenantId || !supabase) return;
@@ -494,7 +507,7 @@ export default function WidgetPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          token,
+          token: widgetToken,
           tenant_id: tenantId,
           conversation_id: targetConversationId,
           visitor_id: visitorId,
@@ -650,7 +663,7 @@ export default function WidgetPage() {
                         </span>
                       </button>
                     ))
-                  )}
+                  }
                 </div>
               ) : displayedMessages.length === 0 ? (
                 <p className="text-[color:var(--muted-foreground)]">
@@ -767,7 +780,7 @@ export default function WidgetPage() {
                 <button
                   type="button"
                   onClick={() => setShowPreviousList((prev) => !prev)}
-                  className="text-xs font-medium text-[color:var(--muted-foreground)]"
+                  className="text-xs font-medium text-[color:var(--muted-foreground]"
                 >
                   {showPreviousList ? "Hide" : "Show"} previous conversations
                 </button>

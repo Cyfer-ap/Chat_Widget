@@ -12,9 +12,21 @@
   const host = currentScript.getAttribute("data-host") || new URL(currentScript.src).origin;
   const width = currentScript.getAttribute("data-width") || "360";
   const height = currentScript.getAttribute("data-height") || "600";
+  const refreshMs = Number(currentScript.getAttribute("data-token-refresh-ms")) || 240000;
 
-  fetch(`${host}/api/tenant/authorize?tenant=${encodeURIComponent(tenantId)}`)
-    .then((response) => response.json())
+  const postToken = (iframe, token) => {
+    if (!iframe || !iframe.contentWindow) return;
+    iframe.contentWindow.postMessage(
+      { type: "widget-token", token, tenant: tenantId },
+      host
+    );
+  };
+
+  const fetchToken = () =>
+    fetch(`${host}/api/tenant/authorize?tenant=${encodeURIComponent(tenantId)}`)
+      .then((response) => response.json());
+
+  fetchToken()
     .then((data) => {
       if (!data.authorized || !data.token) {
         console.warn("Chat widget: domain not authorized.", data.message || "");
@@ -33,6 +45,20 @@
       iframe.style.zIndex = "99999";
       iframe.style.background = "transparent";
       iframe.style.pointerEvents = "auto";
+
+      iframe.addEventListener("load", () => postToken(iframe, data.token));
+      const refreshHandle = setInterval(() => {
+        fetchToken()
+          .then((refreshData) => {
+            if (!refreshData.authorized || !refreshData.token) return;
+            postToken(iframe, refreshData.token);
+          })
+          .catch((error) => {
+            console.warn("Chat widget: token refresh failed.", error);
+          });
+      }, refreshMs);
+
+      iframe.addEventListener("error", () => clearInterval(refreshHandle));
 
       document.body.appendChild(iframe);
     })

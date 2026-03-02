@@ -88,13 +88,27 @@ Copy-paste into any HTML page:
 ></script>
 ```
 
-The script creates a fixed bottom-right iframe. It reads `document.referrer` and calls `/api/tenant/authorize` to verify the embedding domain against the `tenant_sites` allowlist before rendering anything.
+The script creates a fixed bottom-right iframe. It calls `/api/tenant/authorize`, which uses the browser `Origin` header to verify the embedding domain against the `tenant_sites` allowlist before rendering anything. The loader refreshes the token on an interval and posts updates into the iframe to avoid expired-token errors; customize the interval with `data-token-refresh-ms`.
+
+Example with custom refresh cadence:
+
+```html
+<script
+  src="https://your-app.com/widget.js"
+  data-tenant="YOUR_TENANT_ID"
+  data-host="https://your-app.com"
+  data-title="Live support"
+  data-width="360"
+  data-height="600"
+  data-token-refresh-ms="240000"
+></script>
+```
 
 ---
 
 ## Embedding security headers
 
-The `/widget` route emits a dynamic `Content-Security-Policy` header with a `frame-ancestors` directive derived from the signed widget token. If the token is missing or invalid, the policy falls back to `frame-ancestors 'none'` to prevent embedding. Tokens are signed using `WIDGET_TOKEN_SECRET` and include the embedding `Origin` so the browser can enforce the allowed parent origin.
+The `/widget` route emits a dynamic `Content-Security-Policy` header with a `frame-ancestors` directive derived from the signed widget token. If the token is missing or invalid, the policy falls back to `frame-ancestors 'none'` to prevent embedding. Tokens are signed using `WIDGET_TOKEN_SECRET` and include the embedding `Origin` so the browser can enforce the allowed parent origin. Tokens are refreshed by the embed script to keep conversations active.
 
 ---
 
