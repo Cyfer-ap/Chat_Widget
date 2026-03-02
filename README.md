@@ -34,6 +34,8 @@ supabase/migrations/0001_init.sql
 supabase/migrations/0002_conversations_last_message_at.sql
 supabase/migrations/0003_reopen_resolved_on_visitor_message.sql
 supabase/migrations/0004_ticketing_fields_and_triggers.sql
+supabase/migrations/0005_composite_fk_tenant_integrity.sql
+supabase/migrations/0006_rate_limit_log.sql
 ```
 
 Then apply RLS policies:
