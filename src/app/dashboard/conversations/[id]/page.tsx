@@ -339,6 +339,11 @@ export default function ConversationPage() {
   const updateStatus = async (nextStatus: Conversation["status"]) => {
     if (!conversation) return;
 
+    if (conversation.status === "closed" && nextStatus !== "closed") {
+      setError("Closed conversations cannot be reopened.");
+      return;
+    }
+
     const supabase = getSupabaseClient();
     if (!supabase) {
       setError("Missing Supabase environment variables.");
@@ -367,6 +372,10 @@ export default function ConversationPage() {
 
   const toggleStatus = async () => {
     if (!conversation) return;
+    if (conversation.status === "closed") {
+      setError("Closed conversations cannot be reopened.");
+      return;
+    }
     await updateStatus(conversation.status === "open" ? "resolved" : "open");
   };
 
@@ -431,7 +440,11 @@ export default function ConversationPage() {
             </button>
             <button
               type="button"
-              onClick={() => updateStatus("closed")}
+              onClick={() => {
+                if (window.confirm("Close this conversation? This cannot be reopened.")) {
+                  void updateStatus("closed");
+                }
+              }}
               className="rounded-md border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-sm text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
             >
               Close

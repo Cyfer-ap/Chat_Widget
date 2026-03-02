@@ -238,8 +238,20 @@ export default function WidgetPage() {
         return;
       }
 
-      let nextActive = conversationsData?.[0] ?? null;
-      if (shouldStartNewConversation(nextActive)) {
+      const allConversations = conversationsData ?? [];
+      const openConversations = allConversations
+        .filter(
+          (conversation) =>
+            conversation.status === "open" || conversation.status === "pending"
+        )
+        .sort((left, right) =>
+          (right.last_activity_at ?? right.created_at).localeCompare(
+            left.last_activity_at ?? left.created_at
+          )
+        );
+
+      let nextActive = openConversations[0] ?? allConversations[0] ?? null;
+      if (!openConversations.length && shouldStartNewConversation(nextActive)) {
         nextActive = await createConversation(nextVisitorId);
       }
 
@@ -251,7 +263,7 @@ export default function WidgetPage() {
       setActiveConversation(nextActive);
       setConversationId(nextActive.id);
       setPreviousConversations(
-        (conversationsData ?? []).filter((conv) => conv.id !== nextActive?.id)
+        allConversations.filter((conv) => conv.id !== nextActive?.id)
       );
       setViewingConversationId(null);
       setViewingMessages([]);
@@ -456,9 +468,29 @@ export default function WidgetPage() {
       return;
     }
 
+    let targetConversationId = conversationId;
+
     if (activeConversation?.status === "closed") {
-      setStatusMessage("This conversation is closed. Start a new one.");
-      return;
+      if (!visitorId) {
+        setStatusMessage("Missing visitor session.");
+        return;
+      }
+
+      const created = await createConversation(visitorId, "Support request");
+      if (!created) return;
+
+      setPreviousConversations((prev) =>
+        activeConversation ? [activeConversation, ...prev] : prev
+      );
+      setActiveConversation(created);
+      setConversationId(created.id);
+      setViewingConversationId(null);
+      setViewingMessages([]);
+      setMessages([]);
+      setUnreadCount(0);
+      setUnreadCutoff(null);
+      setStatusMessage("");
+      targetConversationId = created.id;
     }
 
     const nextBody = body.trim();
@@ -469,7 +501,7 @@ export default function WidgetPage() {
       .from("messages")
       .insert({
         tenant_id: tenantId,
-        conversation_id: conversationId,
+        conversation_id: targetConversationId,
         sender_type: "visitor",
         body: nextBody,
       })
@@ -486,28 +518,10 @@ export default function WidgetPage() {
     setSending(false);
   };
 
-  const handleStartNewConversation = async () => {
-    if (!visitorId) return;
-
-    const created = await createConversation(visitorId, "Support request");
-    if (!created) return;
-
-    setPreviousConversations((prev) =>
-      activeConversation ? [activeConversation, ...prev] : prev
-    );
-    setActiveConversation(created);
-    setConversationId(created.id);
-    setViewingConversationId(null);
-    setViewingMessages([]);
-    setMessages([]);
-    setUnreadCount(0);
-    setUnreadCutoff(null);
-    setStatusMessage("");
-  };
-
   const handleViewConversation = (conversation: Conversation) => {
     setViewingConversationId(conversation.id);
     setViewingMessages([]);
+    setShowPreviousList(false);
   };
 
   const handleBackToCurrent = () => {
@@ -541,6 +555,17 @@ export default function WidgetPage() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                {isViewingPrevious ? (
+                  <button
+                    type="button"
+                    onClick={handleBackToCurrent}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-white/80 transition hover:bg-white/10 hover:text-white"
+                    aria-label="Back to current conversation"
+                    title="Back to current"
+                  >
+                    ×
+                  </button>
+                ) : null}
                 <ThemeToggle />
                 <button
                   type="button"
@@ -570,6 +595,46 @@ export default function WidgetPage() {
                   <div className="h-4 w-2/3 animate-pulse rounded-full bg-[color:var(--border)]" />
                   <div className="h-4 w-1/2 animate-pulse rounded-full bg-[color:var(--border)]" />
                   <div className="h-4 w-3/5 animate-pulse rounded-full bg-[color:var(--border)]" />
+                </div>
+              ) : showPreviousList && !isViewingPrevious ? (
+                <div className="space-y-2">
+                  {previousConversations.length === 0 ? (
+                    <p className="text-xs text-[color:var(--muted-foreground)]">
+                      No previous conversations yet.
+                    </p>
+                  ) : (
+                    previousConversations.map((conversation) => (
+                      <button
+                        key={conversation.id}
+                        type="button"
+                        onClick={() => handleViewConversation(conversation)}
+                        className="flex w-full items-center justify-between rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-left text-xs"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-[color:var(--foreground)]">
+                            {conversation.subject ?? "Support request"}
+                          </p>
+                          <p className="text-[color:var(--muted-foreground)]">
+                            {new Date(
+                              conversation.last_activity_at ??
+                                conversation.created_at
+                            ).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            conversation.status === "resolved"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : conversation.status === "closed"
+                                ? "bg-zinc-200 text-zinc-700"
+                                : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {conversation.status}
+                        </span>
+                      </button>
+                    ))
+                  )}
                 </div>
               ) : displayedMessages.length === 0 ? (
                 <p className="text-[color:var(--muted-foreground)]">
@@ -633,7 +698,7 @@ export default function WidgetPage() {
                 ) : null}
                 {activeConversation?.status === "closed" && !isViewingPrevious ? (
                   <span className="rounded-full bg-zinc-200 px-3 py-1 font-semibold text-zinc-700">
-                    Closed — start a new conversation
+                    Closed — a new conversation will start on reply
                   </span>
                 ) : null}
                 {isViewingPrevious ? (
@@ -643,42 +708,44 @@ export default function WidgetPage() {
                 ) : null}
               </div>
             </div>
-            <form
-              onSubmit={handleSend}
-              className="flex items-center gap-2 border-t border-[color:var(--border)] bg-[color:var(--card)] p-3"
-            >
-              <div className="flex flex-1 flex-col gap-1">
-                <input
-                  type="text"
-                  value={body}
-                  onChange={(event) => setBody(event.target.value)}
-                  placeholder={
-                    isViewingPrevious
-                      ? "Read-only conversation"
-                      : "Type your message..."
-                  }
-                  className="flex-1 rounded-full border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-                  disabled={sending || isViewingPrevious}
-                  aria-label="Message"
-                />
-                {remoteTyping && !isViewingPrevious ? (
-                  <span className="text-xs text-[color:var(--muted-foreground)]">
-                    Agent is typing...
-                  </span>
-                ) : null}
-              </div>
-              <button
-                type="submit"
-                className={`rounded-full px-4 py-2 text-sm font-medium text-[color:var(--primary-foreground)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-                  sending || !body.trim() || isViewingPrevious
-                    ? "cursor-not-allowed bg-zinc-400"
-                    : "bg-[color:var(--primary)] hover:bg-zinc-800"
-                }`}
-                disabled={sending || !body.trim() || isViewingPrevious}
+            {showPreviousList && !isViewingPrevious ? null : (
+              <form
+                onSubmit={handleSend}
+                className="flex items-center gap-2 border-t border-[color:var(--border)] bg-[color:var(--card)] p-3"
               >
-                {sending ? "Sending..." : "Send"}
-              </button>
-            </form>
+                <div className="flex flex-1 flex-col gap-1">
+                  <input
+                    type="text"
+                    value={body}
+                    onChange={(event) => setBody(event.target.value)}
+                    placeholder={
+                      isViewingPrevious
+                        ? "Read-only conversation"
+                        : "Type your message..."
+                    }
+                    className="flex-1 rounded-full border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                    disabled={sending || isViewingPrevious}
+                    aria-label="Message"
+                  />
+                  {remoteTyping && !isViewingPrevious ? (
+                    <span className="text-xs text-[color:var(--muted-foreground)]">
+                      Agent is typing...
+                    </span>
+                  ) : null}
+                </div>
+                <button
+                  type="submit"
+                  className={`rounded-full px-4 py-2 text-sm font-medium text-[color:var(--primary-foreground)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                    sending || !body.trim() || isViewingPrevious
+                      ? "cursor-not-allowed bg-zinc-400"
+                      : "bg-[color:var(--primary)] hover:bg-zinc-800"
+                  }`}
+                  disabled={sending || !body.trim() || isViewingPrevious}
+                >
+                  {sending ? "Sending..." : "Send"}
+                </button>
+              </form>
+            )}
             <div className="border-t border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-sm">
               <div className="flex items-center justify-between">
                 <button
@@ -688,64 +755,16 @@ export default function WidgetPage() {
                 >
                   {showPreviousList ? "Hide" : "Show"} previous conversations
                 </button>
-                <button
-                  type="button"
-                  onClick={handleStartNewConversation}
-                  className="text-xs font-semibold text-[color:var(--accent)]"
-                >
-                  Start new conversation
-                </button>
+                {isViewingPrevious ? (
+                  <button
+                    type="button"
+                    onClick={handleBackToCurrent}
+                    className="text-xs font-semibold text-[color:var(--accent)]"
+                  >
+                    Back to current conversation
+                  </button>
+                ) : null}
               </div>
-              {showPreviousList ? (
-                <div className="mt-3 space-y-2">
-                  {previousConversations.length === 0 ? (
-                    <p className="text-xs text-[color:var(--muted-foreground)]">
-                      No previous conversations yet.
-                    </p>
-                  ) : (
-                    previousConversations.map((conversation) => (
-                      <button
-                        key={conversation.id}
-                        type="button"
-                        onClick={() => handleViewConversation(conversation)}
-                        className="flex w-full items-center justify-between rounded-lg border border-[color:var(--border)] px-3 py-2 text-left text-xs"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-[color:var(--foreground)]">
-                            {conversation.subject ?? "Support request"}
-                          </p>
-                          <p className="text-[color:var(--muted-foreground)]">
-                            {new Date(
-                              conversation.last_activity_at ??
-                                conversation.created_at
-                            ).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            conversation.status === "resolved"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : conversation.status === "closed"
-                                ? "bg-zinc-200 text-zinc-700"
-                                : "bg-amber-100 text-amber-700"
-                          }`}
-                        >
-                          {conversation.status}
-                        </span>
-                      </button>
-                    ))
-                  )}
-                  {isViewingPrevious ? (
-                    <button
-                      type="button"
-                      onClick={handleBackToCurrent}
-                      className="text-xs font-semibold text-[color:var(--accent)]"
-                    >
-                      Back to current conversation
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
           </div>
         ) : null}

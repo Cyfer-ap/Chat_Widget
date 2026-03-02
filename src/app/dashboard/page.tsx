@@ -40,7 +40,7 @@ export default function DashboardPage() {
   const { session, loading } = useSupabaseAuth();
   const [tenantId, setTenantId] = useState("");
   const [filter, setFilter] = useState<"open" | "resolved" | "closed" | "all">(
-    "all"
+    "open"
   );
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +101,6 @@ export default function DashboardPage() {
       }
 
       const conversationsData = data ?? [];
-      setConversations(conversationsData);
 
       const conversationIds = conversationsData.map((conversation) =>
         conversation.id
@@ -117,8 +116,10 @@ export default function DashboardPage() {
           const latestMap: Record<string, Message> = {};
           const unreadMap: Record<string, number> = {};
           const lastReadMap = getLastReadMap();
+          const withMessages = new Set<string>();
 
           for (const message of messageData) {
+            withMessages.add(message.conversation_id);
             if (!latestMap[message.conversation_id]) {
               latestMap[message.conversation_id] = message as Message;
             }
@@ -132,10 +133,20 @@ export default function DashboardPage() {
             }
           }
 
+          setConversations(
+            conversationsData.filter((conversation) =>
+              withMessages.has(conversation.id)
+            )
+          );
           setLatestMessages(latestMap);
           setUnreadCounts(unreadMap);
+        } else {
+          setConversations([]);
+          setLatestMessages({});
+          setUnreadCounts({});
         }
       } else {
+        setConversations([]);
         setLatestMessages({});
         setUnreadCounts({});
       }
@@ -188,11 +199,46 @@ export default function DashboardPage() {
                 (conversation) => conversation.id !== message.conversation_id
               );
             }
+            if (message.sender_type === "visitor" && filter === "closed") {
+              return prev.filter(
+                (conversation) => conversation.id !== message.conversation_id
+              );
+            }
 
             const idx = prev.findIndex(
               (conversation) => conversation.id === message.conversation_id
             );
-            if (idx === -1) return prev;
+            if (idx === -1) {
+              void (async () => {
+                const { data: conversationData } = await supabase
+                  .from("conversations")
+                  .select(
+                    "id, tenant_id, visitor_id, status, created_at, last_message_at, last_activity_at, subject, resolved_at"
+                  )
+                  .eq("id", message.conversation_id)
+                  .maybeSingle();
+
+                if (!conversationData) return;
+                if (
+                  filter !== "all" &&
+                  conversationData.status !== filter
+                ) {
+                  return;
+                }
+
+                setConversations((current) => {
+                  if (
+                    current.some(
+                      (conversation) => conversation.id === conversationData.id
+                    )
+                  ) {
+                    return current;
+                  }
+                  return [conversationData as Conversation, ...current];
+                });
+              })();
+              return prev;
+            }
 
             const updated = {
               ...prev[idx],
