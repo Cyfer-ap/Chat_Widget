@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id")
+    .select("id, status")
     .eq("id", payload.conversation_id)
     .eq("tenant_id", payload.tenant_id)
     .eq("visitor_id", payload.visitor_id)
@@ -74,6 +74,13 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Conversation not found." },
       { status: 403 }
+    );
+  }
+
+  if (conversation.status === "closed") {
+    return NextResponse.json(
+      { error: "This conversation is closed. Start a new conversation." },
+      { status: 409 }
     );
   }
 
