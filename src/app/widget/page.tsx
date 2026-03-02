@@ -1,12 +1,47 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
-import type { Message } from "@/lib/types";
+import type { Conversation, Message } from "@/lib/types";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const ANON_STORAGE_KEY = "chat_widget_anon_id";
 const RATE_LIMIT_KEY = "chat_widget_rate_limit";
+const WIDGET_LAST_READ_KEY = "chat_widget_last_read_at";
+const NEW_TICKET_AFTER_DAYS = 14;
+const REOPEN_WINDOW_DAYS = 7;
+const CONVERSATION_SELECT =
+  "id, tenant_id, visitor_id, status, created_at, last_message_at, last_activity_at, subject, resolved_at";
+const getLastReadKey = (conversationId: string) =>
+  `${WIDGET_LAST_READ_KEY}:${conversationId}`;
+
+const daysSince = (value?: string | null) => {
+  if (!value) return null;
+  const diffMs = Date.now() - new Date(value).getTime();
+  return Math.floor(diffMs / 86_400_000);
+};
+
+const shouldStartNewConversation = (conversation: Conversation | null) => {
+  if (!conversation) return true;
+  if (conversation.status === "open" || conversation.status === "pending") {
+    return false;
+  }
+  if (conversation.status === "closed") return true;
+
+  if (conversation.status === "resolved") {
+    const resolvedDays = daysSince(
+      conversation.resolved_at ??
+        conversation.last_activity_at ??
+        conversation.created_at
+    );
+    if (resolvedDays === null) return true;
+    if (resolvedDays <= REOPEN_WINDOW_DAYS) return false;
+    return resolvedDays > NEW_TICKET_AFTER_DAYS;
+  }
+
+  return true;
+};
 
 function appendMessage(
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
@@ -17,19 +52,6 @@ function appendMessage(
       ? prev
       : [...prev, message]
   );
-}
-
-function mergeMessages(
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-  incoming: Message[]
-) {
-  setMessages((prev) => {
-    const byId = new Map(prev.map((item) => [item.id, item]));
-    for (const msg of incoming) byId.set(msg.id, msg);
-    return Array.from(byId.values()).sort((a, b) =>
-      a.created_at.localeCompare(b.created_at)
-    );
-  });
 }
 
 function canSendMessage() {
@@ -62,11 +84,67 @@ export default function WidgetPage() {
   const [authorized, setAuthorized] = useState(false);
   const [statusMessage, setStatusMessage] = useState("Checking domain...");
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [activeConversation, setActiveConversation] =
+    useState<Conversation | null>(null);
+  const [previousConversations, setPreviousConversations] = useState<
+    Conversation[]
+  >([]);
+  const [viewingConversationId, setViewingConversationId] = useState<
+    string | null
+  >(null);
+  const [viewingMessages, setViewingMessages] = useState<Message[]>([]);
+  const [showPreviousList, setShowPreviousList] = useState(false);
+  const [visitorId, setVisitorId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
   const [open, setOpen] = useState(false);
+  const [initializing, setInitializing] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCutoff, setUnreadCutoff] = useState<string | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [didInitialScroll, setDidInitialScroll] = useState(false);
+  const [remoteTyping, setRemoteTyping] = useState(false);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const typingChannelRef = useRef<
+    ReturnType<NonNullable<ReturnType<typeof getSupabaseClient>>["channel"]> | null
+  >(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentRef = useRef(0);
+
+  const isViewingPrevious = Boolean(viewingConversationId);
+  const displayedMessages = isViewingPrevious ? viewingMessages : messages;
 
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const conversationSelect = CONVERSATION_SELECT;
+
+  const createConversation = useCallback(
+    async (
+      nextVisitorId: string,
+      subject: string = "Support request"
+    ) => {
+      if (!supabase) return null;
+
+      const { data, error } = await supabase
+        .from("conversations")
+        .insert({
+          tenant_id: tenantId,
+          visitor_id: nextVisitorId,
+          status: "open",
+          subject,
+        })
+        .select(conversationSelect)
+        .single();
+
+      if (error) {
+        setStatusMessage(error.message);
+        return null;
+      }
+
+      return data as Conversation;
+    },
+    [supabase, tenantId, conversationSelect]
+  );
 
   useEffect(() => {
     const verifyDomain = async () => {
@@ -106,12 +184,14 @@ export default function WidgetPage() {
   useEffect(() => {
     if (!authorized || !tenantId || !supabase) return;
 
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
 
     const initConversation = async () => {
+      setInitializing(true);
       const { userId, error: anonError } = await ensureAnonId(supabase);
       if (!userId || anonError) {
         setStatusMessage(anonError ?? "Unable to start anonymous session.");
+        setInitializing(false);
         return;
       }
 
@@ -124,9 +204,9 @@ export default function WidgetPage() {
         .eq("anon_id", anonId)
         .maybeSingle();
 
-      let visitorId = visitor?.id as string | undefined;
+      let nextVisitorId = visitor?.id as string | undefined;
 
-      if (!visitorId) {
+      if (!nextVisitorId) {
         const { data: insertedVisitor, error: visitorError } = await supabase
           .from("visitors")
           .insert({ tenant_id: tenantId, anon_id: anonId })
@@ -135,49 +215,71 @@ export default function WidgetPage() {
 
         if (visitorError) {
           setStatusMessage(visitorError.message);
+          setInitializing(false);
           return;
         }
 
-        visitorId = insertedVisitor.id;
+        nextVisitorId = insertedVisitor.id;
       }
 
-      const { data: existingConversation } = await supabase
-        .from("conversations")
-        .select("id")
-        .eq("tenant_id", tenantId)
-        .eq("visitor_id", visitorId)
-        .eq("status", "open")
-        .order("created_at", { ascending: false })
-        .maybeSingle();
+      setVisitorId(nextVisitorId);
 
-      let activeConversationId = existingConversation?.id as string | undefined;
+      const { data: conversationsData, error: conversationError } =
+        await supabase
+          .from("conversations")
+          .select(conversationSelect)
+          .eq("tenant_id", tenantId)
+          .eq("visitor_id", nextVisitorId)
+          .order("last_activity_at", { ascending: false });
 
-      if (!activeConversationId) {
-        const { data: insertedConversation, error: conversationError } =
-          await supabase
-            .from("conversations")
-            .insert({
-              tenant_id: tenantId,
-              visitor_id: visitorId,
-              status: "open",
-            })
-            .select("id")
-            .single();
-
-        if (conversationError) {
-          setStatusMessage(conversationError.message);
-          return;
-        }
-
-        activeConversationId = insertedConversation.id;
+      if (conversationError) {
+        setStatusMessage(conversationError.message);
+        setInitializing(false);
+        return;
       }
 
-      setConversationId(activeConversationId);
+      let nextActive = conversationsData?.[0] ?? null;
+      if (shouldStartNewConversation(nextActive)) {
+        nextActive = await createConversation(nextVisitorId);
+      }
 
+      if (cancelled || !nextActive) {
+        setInitializing(false);
+        return;
+      }
+
+      setActiveConversation(nextActive);
+      setConversationId(nextActive.id);
+      setPreviousConversations(
+        (conversationsData ?? []).filter((conv) => conv.id !== nextActive?.id)
+      );
+      setViewingConversationId(null);
+      setViewingMessages([]);
+      setMessages([]);
+      setUnreadCount(0);
+      setUnreadCutoff(null);
+      setInitializing(false);
+    };
+
+    initConversation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authorized, supabase, tenantId, conversationSelect, createConversation]);
+
+  useEffect(() => {
+    if (!authorized || !tenantId || !supabase || !conversationId) return;
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let pollHandle: ReturnType<typeof setInterval> | null = null;
+    let typingChannel: ReturnType<typeof supabase.channel> | null = null;
+
+    const loadMessages = async () => {
       const { data: messageData, error: messageError } = await supabase
         .from("messages")
         .select("id, tenant_id, conversation_id, sender_type, body, created_at")
-        .eq("conversation_id", activeConversationId)
+        .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true });
 
       if (messageError) {
@@ -187,48 +289,162 @@ export default function WidgetPage() {
 
       setMessages(messageData ?? []);
 
-      const poll = setInterval(async () => {
-        const { data: polled } = await supabase
-          .from("messages")
-          .select("id, tenant_id, conversation_id, sender_type, body, created_at")
-          .eq("conversation_id", activeConversationId)
-          .order("created_at", { ascending: true });
-        if (polled?.length) mergeMessages(setMessages, polled);
-      }, 5000);
-
-      channel = supabase
-        .channel(`messages:${activeConversationId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
-            filter: `conversation_id=eq.${activeConversationId}`,
-          },
-          (payload) => {
-            const incoming = payload.new as Message;
-            appendMessage(setMessages, incoming);
-          }
-        )
-        .subscribe();
-
-      return () => {
-        clearInterval(poll);
-      };
+      const lastReadAt = localStorage.getItem(getLastReadKey(conversationId));
+      if (lastReadAt) {
+        const unread = (messageData ?? []).filter(
+          (message) =>
+            message.sender_type === "agent" && message.created_at > lastReadAt
+        ).length;
+        setUnreadCount(unread);
+      }
     };
 
-    const cleanupPromise = initConversation();
+    loadMessages();
+
+    pollHandle = setInterval(loadMessages, 5000);
+
+    channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const incoming = payload.new as Message;
+          appendMessage(setMessages, incoming);
+
+          setActiveConversation((prev) => {
+            if (!prev || prev.id !== conversationId) return prev;
+            const nextStatus =
+              incoming.sender_type === "visitor" && prev.status === "resolved"
+                ? "open"
+                : prev.status;
+            return {
+              ...prev,
+              status: nextStatus,
+              last_activity_at: incoming.created_at,
+              last_message_at: incoming.created_at,
+            };
+          });
+
+          if (incoming.sender_type === "agent" && !open) {
+            setUnreadCount((prev) => prev + 1);
+          }
+        }
+      )
+      .subscribe();
+
+    typingChannel = supabase
+      .channel(`typing:${conversationId}`)
+      .on("broadcast", { event: "typing" }, (payload) => {
+        const sender = (payload as { payload?: { sender?: string } }).payload
+          ?.sender;
+        if (sender === "visitor") return;
+
+        setRemoteTyping(true);
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+          setRemoteTyping(false);
+        }, 1400);
+      })
+      .subscribe();
+
+    typingChannelRef.current = typingChannel;
 
     return () => {
+      if (pollHandle) clearInterval(pollHandle);
       if (channel) supabase.removeChannel(channel);
-      cleanupPromise?.then((cleanup) => cleanup?.());
+      if (typingChannel) supabase.removeChannel(typingChannel);
+      typingChannelRef.current = null;
     };
-  }, [authorized, supabase, tenantId]);
+  }, [authorized, supabase, tenantId, conversationId, open]);
+
+  useEffect(() => {
+    if (!authorized || !supabase || !viewingConversationId) return;
+
+    const loadViewingMessages = async () => {
+      const { data: messageData, error: messageError } = await supabase
+        .from("messages")
+        .select("id, tenant_id, conversation_id, sender_type, body, created_at")
+        .eq("conversation_id", viewingConversationId)
+        .order("created_at", { ascending: true });
+
+      if (messageError) {
+        setStatusMessage(messageError.message);
+        return;
+      }
+
+      setViewingMessages(messageData ?? []);
+    };
+
+    loadViewingMessages();
+  }, [authorized, supabase, viewingConversationId]);
+
+  useEffect(() => {
+    if (!open || !conversationId) return;
+    const lastReadAt = localStorage.getItem(getLastReadKey(conversationId));
+    setUnreadCutoff(lastReadAt);
+    setUnreadCount(0);
+  }, [open, conversationId]);
+
+  useEffect(() => {
+    if (!open || !conversationId) return;
+    const latest = messages[messages.length - 1]?.created_at;
+    if (latest) {
+      localStorage.setItem(getLastReadKey(conversationId), latest);
+    }
+  }, [messages, open, conversationId]);
+
+  useEffect(() => {
+    if (!messagesContainerRef.current) return;
+
+    const container = messagesContainerRef.current;
+    const handleScroll = () => {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      setIsAtBottom(distanceFromBottom < 40);
+    };
+
+    handleScroll();
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !open) return;
+
+    if (!didInitialScroll) {
+      container.scrollTop = container.scrollHeight;
+      setDidInitialScroll(true);
+      return;
+    }
+
+    if (isAtBottom) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [messages, open, isAtBottom, didInitialScroll]);
+
+  useEffect(() => {
+    if (!body.trim() || !conversationId || isViewingPrevious) return;
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 900) return;
+    lastTypingSentRef.current = now;
+
+    typingChannelRef.current?.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { sender: "visitor" },
+    });
+  }, [body, conversationId, isViewingPrevious]);
 
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!conversationId || !body.trim()) return;
+    if (!conversationId || !body.trim() || isViewingPrevious) return;
 
     if (!canSendMessage()) {
       setStatusMessage("Please wait a minute before sending more messages.");
@@ -240,8 +456,14 @@ export default function WidgetPage() {
       return;
     }
 
+    if (activeConversation?.status === "closed") {
+      setStatusMessage("This conversation is closed. Start a new one.");
+      return;
+    }
+
     const nextBody = body.trim();
     setBody("");
+    setSending(true);
 
     const { data, error } = await supabase
       .from("messages")
@@ -256,10 +478,41 @@ export default function WidgetPage() {
 
     if (error) {
       setStatusMessage(error.message);
+      setSending(false);
       return;
     }
 
     if (data) appendMessage(setMessages, data);
+    setSending(false);
+  };
+
+  const handleStartNewConversation = async () => {
+    if (!visitorId) return;
+
+    const created = await createConversation(visitorId, "Support request");
+    if (!created) return;
+
+    setPreviousConversations((prev) =>
+      activeConversation ? [activeConversation, ...prev] : prev
+    );
+    setActiveConversation(created);
+    setConversationId(created.id);
+    setViewingConversationId(null);
+    setViewingMessages([]);
+    setMessages([]);
+    setUnreadCount(0);
+    setUnreadCutoff(null);
+    setStatusMessage("");
+  };
+
+  const handleViewConversation = (conversation: Conversation) => {
+    setViewingConversationId(conversation.id);
+    setViewingMessages([]);
+  };
+
+  const handleBackToCurrent = () => {
+    setViewingConversationId(null);
+    setViewingMessages([]);
   };
 
   if (!authorized) {
@@ -274,67 +527,241 @@ export default function WidgetPage() {
     <div className="h-screen w-screen bg-transparent">
       <div className="fixed bottom-4 right-4 flex flex-col items-end gap-2">
         {open ? (
-          <div className="flex h-[480px] w-[320px] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl">
-            <div className="flex items-center justify-between bg-zinc-900 px-4 py-3 text-white">
-              <span className="text-sm font-semibold">Live support</span>
-              <button
-                type="button"
-                className="text-sm"
-                onClick={() => setOpen(false)}
-              >
-                Close
-              </button>
+          <div className="flex h-[70vh] w-[90vw] max-w-[360px] flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] shadow-2xl ring-1 ring-black/5 sm:h-[480px] sm:w-[320px]">
+            <div className="flex items-center justify-between bg-gradient-to-r from-[color:var(--primary)] to-zinc-800 px-4 py-3 text-[color:var(--primary-foreground)]">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">Live support</span>
+                {activeConversation?.subject ? (
+                  <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white/90">
+                    {activeConversation.subject}
+                  </span>
+                ) : null}
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white/90">
+                  {initializing ? "Connecting" : "Online"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-white/80 transition hover:bg-white/10 hover:text-white"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close chat"
+                >
+                  ×
+                </button>
+              </div>
             </div>
             {statusMessage ? (
-              <div className="border-b border-zinc-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
+              <div
+                className="border-b border-[color:var(--border)] bg-amber-50 px-4 py-2 text-xs text-amber-700"
+                role="status"
+                aria-live="polite"
+              >
                 {statusMessage}
               </div>
             ) : null}
-            <div className="flex-1 space-y-3 overflow-y-auto p-4 text-sm">
-              {messages.length === 0 ? (
-                <p className="text-zinc-500">Start the conversation below.</p>
+            <div
+              ref={messagesContainerRef}
+              className="relative flex-1 space-y-3 overflow-y-auto bg-[color:var(--muted)] p-3 text-sm sm:p-4"
+            >
+              {initializing ? (
+                <div className="space-y-3">
+                  <div className="h-4 w-2/3 animate-pulse rounded-full bg-[color:var(--border)]" />
+                  <div className="h-4 w-1/2 animate-pulse rounded-full bg-[color:var(--border)]" />
+                  <div className="h-4 w-3/5 animate-pulse rounded-full bg-[color:var(--border)]" />
+                </div>
+              ) : displayedMessages.length === 0 ? (
+                <p className="text-[color:var(--muted-foreground)]">
+                  {isViewingPrevious
+                    ? "No messages in this conversation."
+                    : "How can I help?"}
+                </p>
               ) : (
-                messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`max-w-[80%] rounded-2xl px-3 py-2 ${
-                      message.sender_type === "visitor"
-                        ? "ml-auto bg-zinc-900 text-white"
-                        : "bg-zinc-100 text-zinc-900"
-                    }`}
-                  >
-                    {message.body}
-                  </div>
-                ))
+                displayedMessages.map((message, index) => {
+                  const previous = index > 0 ? displayedMessages[index - 1] : null;
+                  const shouldShowUnreadDivider =
+                    !isViewingPrevious &&
+                    unreadCutoff &&
+                    message.sender_type === "agent" &&
+                    message.created_at > unreadCutoff &&
+                    (!previous || previous.created_at <= unreadCutoff);
+
+                  return (
+                    <div key={message.id}>
+                      {shouldShowUnreadDivider ? (
+                        <div className="my-2 flex items-center gap-2">
+                          <span className="h-px flex-1 bg-[color:var(--border)]" />
+                          <span className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                            Unread messages
+                          </span>
+                          <span className="h-px flex-1 bg-[color:var(--border)]" />
+                        </div>
+                      ) : null}
+                      <div
+                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-[13px] shadow-sm ${
+                          message.sender_type === "visitor"
+                            ? "ml-auto bg-[color:var(--primary)] text-[color:var(--primary-foreground)]"
+                            : "bg-[color:var(--card)] text-[color:var(--foreground)]"
+                        }`}
+                      >
+                        {message.body}
+                      </div>
+                    </div>
+                  );
+                })
               )}
+              {!isAtBottom && displayedMessages.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const container = messagesContainerRef.current;
+                    if (container) container.scrollTop = container.scrollHeight;
+                  }}
+                  className="sticky bottom-2 ml-auto rounded-full bg-[color:var(--accent)] px-3 py-1 text-xs font-semibold text-[color:var(--accent-foreground)] shadow-sm"
+                >
+                  Scroll to latest
+                </button>
+              ) : null}
+            </div>
+            <div className="border-t border-[color:var(--border)] bg-[color:var(--card)] p-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {activeConversation?.status === "resolved" && !isViewingPrevious ? (
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-700">
+                    ✅ Resolved — reply to reopen
+                  </span>
+                ) : null}
+                {activeConversation?.status === "closed" && !isViewingPrevious ? (
+                  <span className="rounded-full bg-zinc-200 px-3 py-1 font-semibold text-zinc-700">
+                    Closed — start a new conversation
+                  </span>
+                ) : null}
+                {isViewingPrevious ? (
+                  <span className="rounded-full bg-zinc-200 px-3 py-1 font-semibold text-zinc-700">
+                    Viewing previous conversation
+                  </span>
+                ) : null}
+              </div>
             </div>
             <form
               onSubmit={handleSend}
-              className="flex items-center gap-2 border-t border-zinc-200 bg-white p-3"
+              className="flex items-center gap-2 border-t border-[color:var(--border)] bg-[color:var(--card)] p-3"
             >
-              <input
-                type="text"
-                value={body}
-                onChange={(event) => setBody(event.target.value)}
-                placeholder="Type your message..."
-                className="flex-1 rounded-md border border-zinc-200 px-3 py-2 text-sm"
-              />
+              <div className="flex flex-1 flex-col gap-1">
+                <input
+                  type="text"
+                  value={body}
+                  onChange={(event) => setBody(event.target.value)}
+                  placeholder={
+                    isViewingPrevious
+                      ? "Read-only conversation"
+                      : "Type your message..."
+                  }
+                  className="flex-1 rounded-full border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  disabled={sending || isViewingPrevious}
+                  aria-label="Message"
+                />
+                {remoteTyping && !isViewingPrevious ? (
+                  <span className="text-xs text-[color:var(--muted-foreground)]">
+                    Agent is typing...
+                  </span>
+                ) : null}
+              </div>
               <button
                 type="submit"
-                className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white"
+                className={`rounded-full px-4 py-2 text-sm font-medium text-[color:var(--primary-foreground)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                  sending || !body.trim() || isViewingPrevious
+                    ? "cursor-not-allowed bg-zinc-400"
+                    : "bg-[color:var(--primary)] hover:bg-zinc-800"
+                }`}
+                disabled={sending || !body.trim() || isViewingPrevious}
               >
-                Send
+                {sending ? "Sending..." : "Send"}
               </button>
             </form>
+            <div className="border-t border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowPreviousList((prev) => !prev)}
+                  className="text-xs font-medium text-[color:var(--muted-foreground)]"
+                >
+                  {showPreviousList ? "Hide" : "Show"} previous conversations
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartNewConversation}
+                  className="text-xs font-semibold text-[color:var(--accent)]"
+                >
+                  Start new conversation
+                </button>
+              </div>
+              {showPreviousList ? (
+                <div className="mt-3 space-y-2">
+                  {previousConversations.length === 0 ? (
+                    <p className="text-xs text-[color:var(--muted-foreground)]">
+                      No previous conversations yet.
+                    </p>
+                  ) : (
+                    previousConversations.map((conversation) => (
+                      <button
+                        key={conversation.id}
+                        type="button"
+                        onClick={() => handleViewConversation(conversation)}
+                        className="flex w-full items-center justify-between rounded-lg border border-[color:var(--border)] px-3 py-2 text-left text-xs"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-[color:var(--foreground)]">
+                            {conversation.subject ?? "Support request"}
+                          </p>
+                          <p className="text-[color:var(--muted-foreground)]">
+                            {new Date(
+                              conversation.last_activity_at ??
+                                conversation.created_at
+                            ).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            conversation.status === "resolved"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : conversation.status === "closed"
+                                ? "bg-zinc-200 text-zinc-700"
+                                : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {conversation.status}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                  {isViewingPrevious ? (
+                    <button
+                      type="button"
+                      onClick={handleBackToCurrent}
+                      className="text-xs font-semibold text-[color:var(--accent)]"
+                    >
+                      Back to current conversation
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-sm font-semibold text-white shadow-lg"
-          aria-label="Open chat"
+          className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-[color:var(--primary)] to-zinc-700 text-sm font-semibold text-[color:var(--primary-foreground)] shadow-lg ring-1 ring-black/10 transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          aria-label={open ? "Close chat" : "Open chat"}
+          aria-expanded={open}
         >
           {open ? "×" : "Chat"}
+          {unreadCount > 0 ? (
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[color:var(--accent)] px-1 text-[11px] font-semibold text-[color:var(--accent-foreground)]">
+              {unreadCount}
+            </span>
+          ) : null}
         </button>
       </div>
     </div>

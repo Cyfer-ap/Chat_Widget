@@ -5,16 +5,52 @@ import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useSupabaseAuth } from "@/lib/useAuth";
 import type { Conversation, Message } from "@/lib/types";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const TENANT_STORAGE_KEY = "chat_widget_tenant_id";
+const DASHBOARD_LAST_READ_KEY = "chat_dashboard_last_read";
+
+const getLastReadMap = (): Record<string, string> => {
+  const raw = localStorage.getItem(DASHBOARD_LAST_READ_KEY);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, string>;
+  } catch {
+    return {};
+  }
+};
+
+const setLastReadMap = (next: Record<string, string>) => {
+  localStorage.setItem(DASHBOARD_LAST_READ_KEY, JSON.stringify(next));
+};
+
+const formatRelativeTime = (value: string) => {
+  const diffMs = Date.now() - new Date(value).getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) return "now";
+  if (diffMinutes < 60) return `${diffMinutes}m`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d`;
+  return new Date(value).toLocaleDateString();
+};
 
 export default function DashboardPage() {
   const { session, loading } = useSupabaseAuth();
   const [tenantId, setTenantId] = useState("");
-  const [filter, setFilter] = useState<"open" | "resolved" | "all">("all");
+  const [filter, setFilter] = useState<"open" | "resolved" | "closed" | "all">(
+    "all"
+  );
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [latestMessages, setLatestMessages] = useState<Record<string, Message>>(
+    {}
+  );
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem(TENANT_STORAGE_KEY);
@@ -38,13 +74,16 @@ export default function DashboardPage() {
 
     let pollHandle: ReturnType<typeof setInterval> | null = null;
 
-    const loadConversations = async () => {
-      setBusy(true);
+    const loadConversations = async (isPoll = false) => {
+      if (!hasLoaded && !isPoll) setBusy(true);
+      if (isPoll) setIsRefreshing(true);
       setError(null);
 
       let query = supabase
         .from("conversations")
-        .select("id, tenant_id, visitor_id, status, created_at, last_message_at")
+        .select(
+          "id, tenant_id, visitor_id, status, created_at, last_message_at, last_activity_at, subject, resolved_at"
+        )
         .order("last_message_at", { ascending: false });
 
       if (tenantId) {
@@ -56,20 +95,64 @@ export default function DashboardPage() {
 
       if (queryError) {
         setError(queryError.message);
-      } else {
-        setConversations(data ?? []);
+        setBusy(false);
+        setIsRefreshing(false);
+        return;
       }
+
+      const conversationsData = data ?? [];
+      setConversations(conversationsData);
+
+      const conversationIds = conversationsData.map((conversation) =>
+        conversation.id
+      );
+      if (conversationIds.length > 0) {
+        const { data: messageData } = await supabase
+          .from("messages")
+          .select("id, tenant_id, conversation_id, sender_type, body, created_at")
+          .in("conversation_id", conversationIds)
+          .order("created_at", { ascending: false });
+
+        if (messageData) {
+          const latestMap: Record<string, Message> = {};
+          const unreadMap: Record<string, number> = {};
+          const lastReadMap = getLastReadMap();
+
+          for (const message of messageData) {
+            if (!latestMap[message.conversation_id]) {
+              latestMap[message.conversation_id] = message as Message;
+            }
+
+            if (message.sender_type === "visitor") {
+              const lastReadAt = lastReadMap[message.conversation_id];
+              if (!lastReadAt || message.created_at > lastReadAt) {
+                unreadMap[message.conversation_id] =
+                  (unreadMap[message.conversation_id] ?? 0) + 1;
+              }
+            }
+          }
+
+          setLatestMessages(latestMap);
+          setUnreadCounts(unreadMap);
+        }
+      } else {
+        setLatestMessages({});
+        setUnreadCounts({});
+      }
+
       setBusy(false);
+      setIsRefreshing(false);
+      setHasLoaded(true);
     };
 
     loadConversations();
 
-    pollHandle = setInterval(loadConversations, 5000);
+    pollHandle = setInterval(() => loadConversations(true), 5000);
 
     return () => {
       if (pollHandle) clearInterval(pollHandle);
     };
-  }, [canLoad, filter, tenantId]);
+  }, [canLoad, filter, tenantId, hasLoaded]);
 
   useEffect(() => {
     if (!canLoad) return;
@@ -86,7 +169,26 @@ export default function DashboardPage() {
           const message = payload.new as Message;
           if (tenantId && message.tenant_id !== tenantId) return;
 
+          setLatestMessages((prev) => ({
+            ...prev,
+            [message.conversation_id]: message,
+          }));
+
+          if (message.sender_type === "visitor") {
+            setUnreadCounts((prev) => ({
+              ...prev,
+              [message.conversation_id]:
+                (prev[message.conversation_id] ?? 0) + 1,
+            }));
+          }
+
           setConversations((prev) => {
+            if (message.sender_type === "visitor" && filter === "resolved") {
+              return prev.filter(
+                (conversation) => conversation.id !== message.conversation_id
+              );
+            }
+
             const idx = prev.findIndex(
               (conversation) => conversation.id === message.conversation_id
             );
@@ -95,6 +197,8 @@ export default function DashboardPage() {
             const updated = {
               ...prev[idx],
               last_message_at: message.created_at,
+              status:
+                message.sender_type === "visitor" ? "open" : prev[idx].status,
             };
 
             const next = prev.slice();
@@ -109,7 +213,7 @@ export default function DashboardPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [canLoad, tenantId]);
+  }, [canLoad, tenantId, filter]);
 
   if (loading) {
     return (
@@ -139,60 +243,85 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-6">
+    <div className="min-h-screen bg-[color:var(--background)] p-4 sm:p-6 text-[color:var(--foreground)]">
       <div className="mx-auto max-w-4xl space-y-6">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-zinc-900">Inbox</h1>
-            <p className="text-sm text-zinc-500">
-              Track and reply to live conversations.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              type="text"
-              placeholder="Tenant ID"
-              value={tenantId}
-              onChange={(event) => setTenantId(event.target.value)}
-              className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm sm:w-64"
-            />
-            <div className="flex rounded-md border border-zinc-200 bg-white p-1">
-              <button
-                type="button"
-                onClick={() => setFilter("open")}
-                className={`rounded-md px-3 py-1 text-sm ${
-                  filter === "open"
-                    ? "bg-zinc-900 text-white"
-                    : "text-zinc-600"
-                }`}
-              >
-                Open
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilter("resolved")}
-                className={`rounded-md px-3 py-1 text-sm ${
-                  filter === "resolved"
-                    ? "bg-zinc-900 text-white"
-                    : "text-zinc-600"
-                }`}
-              >
-                Resolved
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilter("all")}
-                className={`rounded-md px-3 py-1 text-sm ${
-                  filter === "all"
-                    ? "bg-zinc-900 text-white"
-                    : "text-zinc-600"
-                }`}
-              >
-                All
-              </button>
+        <div className="relative">
+          <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold">Inbox</h1>
+              <p className="text-sm text-[color:var(--muted-foreground)]">
+                Track and reply to live conversations.
+              </p>
             </div>
-          </div>
-        </header>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <ThemeToggle />
+              <input
+                type="text"
+                placeholder="Tenant ID"
+                value={tenantId}
+                onChange={(event) => setTenantId(event.target.value)}
+                className="w-full rounded-md border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 sm:w-64"
+                aria-label="Tenant ID"
+              />
+              <div
+                className="flex w-full flex-wrap gap-1 rounded-md border border-[color:var(--border)] bg-[color:var(--card)] p-1 sm:w-auto sm:flex-nowrap"
+                role="group"
+                aria-label="Conversation filter"
+              >
+                <button
+                  type="button"
+                  onClick={() => setFilter("open")}
+                  className={`rounded-md px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                    filter === "open"
+                      ? "bg-zinc-900 text-white"
+                      : "text-zinc-600"
+                  }`}
+                >
+                  Open
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilter("resolved")}
+                  className={`rounded-md px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                    filter === "resolved"
+                      ? "bg-zinc-900 text-white"
+                      : "text-zinc-600"
+                  }`}
+                >
+                  Resolved
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilter("closed")}
+                  className={`rounded-md px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                    filter === "closed"
+                      ? "bg-zinc-900 text-white"
+                      : "text-zinc-600"
+                  }`}
+                >
+                  Closed
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilter("all")}
+                  className={`rounded-md px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                    filter === "all"
+                      ? "bg-zinc-900 text-white"
+                      : "text-zinc-600"
+                  }`}
+                >
+                  All
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {isRefreshing ? (
+            <span className="absolute right-0 top-0 rounded-full bg-[color:var(--muted)] px-2 py-1 text-xs text-[color:var(--muted-foreground)]">
+              Refreshing...
+            </span>
+          ) : null}
+        </div>
 
         {error ? (
           <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">
@@ -200,32 +329,85 @@ export default function DashboardPage() {
           </p>
         ) : null}
 
-        <div className="rounded-lg border border-zinc-200 bg-white">
-          {busy ? (
-            <p className="p-4 text-sm text-zinc-500">Loading conversations...</p>
+        <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card)]">
+          {busy && conversations.length === 0 ? (
+            <p className="p-4 text-sm text-[color:var(--muted-foreground)]">
+              Loading conversations...
+            </p>
           ) : conversations.length === 0 ? (
-            <p className="p-4 text-sm text-zinc-500">
+            <p className="p-4 text-sm text-[color:var(--muted-foreground)]">
               No conversations found for this tenant.
             </p>
           ) : (
-            <ul className="divide-y divide-zinc-100">
-              {conversations.map((conversation) => (
-                <li key={conversation.id} className="p-4">
-                  <Link
-                    href={`/dashboard/conversations/${conversation.id}`}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <span className="font-medium text-zinc-900">
-                      Conversation {conversation.id.slice(0, 8)}
-                    </span>
-                    <span className="text-xs text-zinc-500">
-                      {new Date(
-                        conversation.last_message_at ?? conversation.created_at
-                      ).toLocaleString()}
-                    </span>
-                  </Link>
-                </li>
-              ))}
+            <ul className="divide-y divide-[color:var(--border)]">
+              {conversations.map((conversation) => {
+                const latestMessage = latestMessages[conversation.id];
+                const latestTimestamp =
+                  latestMessage?.created_at ??
+                  conversation.last_message_at ??
+                  conversation.created_at;
+                const previewText = latestMessage
+                  ? latestMessage.body
+                  : "No messages yet.";
+                const unreadCount = unreadCounts[conversation.id] ?? 0;
+                return (
+                  <li key={conversation.id} className="p-3 sm:p-4">
+                    <Link
+                      href={`/dashboard/conversations/${conversation.id}`}
+                      onClick={() => {
+                        const lastReadMap = getLastReadMap();
+                        setLastReadMap({
+                          ...lastReadMap,
+                          [conversation.id]: latestTimestamp,
+                        });
+                        setUnreadCounts((prev) => ({
+                          ...prev,
+                          [conversation.id]: 0,
+                        }));
+                      }}
+                      className="group flex flex-col items-start justify-between gap-3 rounded-xl border border-transparent px-2 py-3 transition hover:border-[color:var(--border)] hover:bg-[color:var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 sm:flex-row sm:items-center"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--primary)] text-sm font-semibold text-[color:var(--primary-foreground)]">
+                          {conversation.id.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate font-medium">
+                              Conversation {conversation.id.slice(0, 8)}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                conversation.status === "resolved"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : conversation.status === "closed"
+                                    ? "bg-zinc-200 text-zinc-700"
+                                    : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {conversation.status}
+                            </span>
+                            {unreadCount > 0 ? (
+                              <span className="rounded-full bg-[color:var(--accent)] px-2 py-0.5 text-xs font-semibold text-[color:var(--accent-foreground)]">
+                                {unreadCount}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 truncate text-sm text-[color:var(--muted-foreground)]">
+                            {previewText}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex w-full flex-row items-center justify-between gap-2 text-xs text-[color:var(--muted-foreground)] sm:w-auto sm:flex-col sm:items-end">
+                        <span title={new Date(latestTimestamp).toLocaleString()}>
+                          {formatRelativeTime(latestTimestamp)}
+                        </span>
+                        <span className="h-2 w-2 rounded-full bg-[color:var(--border)] group-hover:bg-[color:var(--muted-foreground)]" />
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

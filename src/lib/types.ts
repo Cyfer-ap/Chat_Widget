@@ -1,4 +1,4 @@
-export type ConversationStatus = "open" | "resolved";
+export type ConversationStatus = "open" | "pending" | "resolved" | "closed";
 export type SenderType = "visitor" | "agent";
 
 export interface Conversation {
@@ -8,6 +8,9 @@ export interface Conversation {
   status: ConversationStatus;
   created_at: string;
   last_message_at: string;
+  last_activity_at: string;
+  subject: string | null;
+  resolved_at: string | null;
 }
 
 export interface Message {
