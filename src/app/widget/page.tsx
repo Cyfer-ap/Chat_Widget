@@ -207,7 +207,7 @@ export default function WidgetPage() {
         .eq("anon_id", anonId)
         .maybeSingle();
 
-      let nextVisitorId = visitor?.id as string | undefined;
+      let nextVisitorId: string | null = visitor?.id ?? null;
 
       if (!nextVisitorId) {
         const { data: insertedVisitor, error: visitorError } = await supabase
@@ -222,7 +222,13 @@ export default function WidgetPage() {
           return;
         }
 
-        nextVisitorId = insertedVisitor.id;
+        nextVisitorId = insertedVisitor?.id ?? null;
+      }
+
+      if (!nextVisitorId) {
+        setStatusMessage("Unable to resolve visitor session.");
+        setInitializing(false);
+        return;
       }
 
       setVisitorId(nextVisitorId);
@@ -253,7 +259,8 @@ export default function WidgetPage() {
           )
         );
 
-      let nextActive = openConversations[0] ?? allConversations[0] ?? null;
+      let nextActive: Conversation | null =
+        openConversations[0] ?? allConversations[0] ?? null;
       if (!openConversations.length && shouldStartNewConversation(nextActive)) {
         nextActive = await createConversation(nextVisitorId);
       }
@@ -663,7 +670,7 @@ export default function WidgetPage() {
                         </span>
                       </button>
                     ))
-                  }
+                  )}
                 </div>
               ) : displayedMessages.length === 0 ? (
                 <p className="text-[color:var(--muted-foreground)]">
@@ -780,7 +787,7 @@ export default function WidgetPage() {
                 <button
                   type="button"
                   onClick={() => setShowPreviousList((prev) => !prev)}
-                  className="text-xs font-medium text-[color:var(--muted-foreground]"
+                  className="text-xs font-medium text-[color:var(--muted-foreground)]"
                 >
                   {showPreviousList ? "Hide" : "Show"} previous conversations
                 </button>

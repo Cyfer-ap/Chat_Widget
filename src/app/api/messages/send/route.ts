@@ -10,7 +10,7 @@ interface SendMessagePayload {
   tenant_id: string;
   conversation_id: string;
   visitor_id: string;
-  sender_type: "visitor" | "agent";
+  sender_type: "visitor";
   body: string;
 }
 
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     !payload.conversation_id ||
     !payload.visitor_id ||
     !payload.body ||
-    (payload.sender_type !== "visitor" && payload.sender_type !== "agent")
+    payload.sender_type !== "visitor"
   ) {
     return NextResponse.json(
       { error: "Missing or invalid parameters." },
@@ -79,27 +79,25 @@ export async function POST(request: Request) {
 
   const windowStart = new Date(Date.now() - RATE_WINDOW_MS).toISOString();
 
-  if (payload.sender_type === "visitor") {
-    const { count, error: countError } = await supabase
-      .from("rate_limit_log")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", payload.tenant_id)
-      .eq("visitor_id", payload.visitor_id)
-      .gte("created_at", windowStart);
+  const { count, error: countError } = await supabase
+    .from("rate_limit_log")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", payload.tenant_id)
+    .eq("visitor_id", payload.visitor_id)
+    .gte("created_at", windowStart);
 
-    if (countError) {
-      return NextResponse.json(
-        { error: countError.message },
-        { status: 500 }
-      );
-    }
+  if (countError) {
+    return NextResponse.json(
+      { error: countError.message },
+      { status: 500 }
+    );
+  }
 
-    if ((count ?? 0) >= RATE_LIMIT_COUNT) {
-      return NextResponse.json(
-        { error: "Please wait a minute before sending more messages." },
-        { status: 429 }
-      );
-    }
+  if ((count ?? 0) >= RATE_LIMIT_COUNT) {
+    return NextResponse.json(
+      { error: "Please wait a minute before sending more messages." },
+      { status: 429 }
+    );
   }
 
   const { data: message, error: messageError } = await supabase
@@ -107,7 +105,7 @@ export async function POST(request: Request) {
     .insert({
       tenant_id: payload.tenant_id,
       conversation_id: payload.conversation_id,
-      sender_type: payload.sender_type,
+      sender_type: "visitor",
       body: payload.body.trim(),
     })
     .select("id, tenant_id, conversation_id, sender_type, body, created_at")
@@ -120,19 +118,17 @@ export async function POST(request: Request) {
     );
   }
 
-  if (payload.sender_type === "visitor") {
-    await supabase.from("rate_limit_log").insert({
-      tenant_id: payload.tenant_id,
-      visitor_id: payload.visitor_id,
-    });
+  await supabase.from("rate_limit_log").insert({
+    tenant_id: payload.tenant_id,
+    visitor_id: payload.visitor_id,
+  });
 
-    await supabase
-      .from("rate_limit_log")
-      .delete()
-      .eq("tenant_id", payload.tenant_id)
-      .eq("visitor_id", payload.visitor_id)
-      .lt("created_at", windowStart);
-  }
+  await supabase
+    .from("rate_limit_log")
+    .delete()
+    .eq("tenant_id", payload.tenant_id)
+    .eq("visitor_id", payload.visitor_id)
+    .lt("created_at", windowStart);
 
   return NextResponse.json({ data: message });
 }

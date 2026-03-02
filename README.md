@@ -208,6 +208,7 @@ All tables carry `tenant_id` for multi-tenant isolation.
 - Visitors sign in anonymously; their Supabase `auth.uid()` is stored in `visitors.anon_id`.
 - For MVP testing you can temporarily disable RLS or use the service role key for server-side checks.
 - Domain allowlist is enforced via `/api/tenant/authorize` using the service role key.
+- `/api/messages/send` accepts visitor messages only; agent replies should use authenticated Supabase client inserts (or a dedicated agent API).
 
 ---
 
