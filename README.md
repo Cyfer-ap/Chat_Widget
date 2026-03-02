@@ -58,6 +58,7 @@ Create `.env.local` in the project root:
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+WIDGET_TOKEN_SECRET=your-widget-token-secret
 ```
 
 ### 4 — Run the dev server
@@ -91,7 +92,7 @@ The script creates a fixed bottom-right iframe. It reads `document.referrer` and
 
 ## Embedding security headers
 
-The `/widget` route emits a dynamic `Content-Security-Policy` header with a `frame-ancestors` directive derived from the signed widget token. If the token is missing or invalid, the policy falls back to `frame-ancestors 'none'` to prevent embedding.
+The `/widget` route emits a dynamic `Content-Security-Policy` header with a `frame-ancestors` directive derived from the signed widget token. If the token is missing or invalid, the policy falls back to `frame-ancestors 'none'` to prevent embedding. Tokens are signed using `WIDGET_TOKEN_SECRET` and include the embedding `Origin` so the browser can enforce the allowed parent origin.
 
 ---
 
