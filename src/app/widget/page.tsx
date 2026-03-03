@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import type { Conversation, Message } from "@/lib/types";
@@ -53,7 +53,7 @@ function appendMessage(
   );
 }
 
-export default function WidgetPage() {
+function WidgetContent() {
   const searchParams = useSearchParams();
   const tenantId = searchParams.get("tenant") ?? "";
   const initialToken = searchParams.get("token") ?? "";
@@ -820,6 +820,14 @@ export default function WidgetPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function WidgetPage() {
+  return (
+    <Suspense fallback={null}>
+      <WidgetContent />
+    </Suspense>
   );
 }
 

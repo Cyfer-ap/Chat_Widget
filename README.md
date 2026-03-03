@@ -36,6 +36,7 @@ supabase/migrations/0003_reopen_resolved_on_visitor_message.sql
 supabase/migrations/0004_ticketing_fields_and_triggers.sql
 supabase/migrations/0005_composite_fk_tenant_integrity.sql
 supabase/migrations/0006_rate_limit_log.sql
+supabase/migrations/0007_bootstrap_and_invites.sql
 ```
 
 Then apply RLS policies:
@@ -61,6 +62,7 @@ NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 WIDGET_TOKEN_SECRET=your-widget-token-secret
+BOOTSTRAP_ADMIN_SECRET=your-bootstrap-secret
 ```
 
 ### 4 — Run the dev server
@@ -230,3 +232,46 @@ npm run test    # Node test runner
 - No agent assignment or presence (online/offline) tracking yet.
 - File/image attachments not yet implemented.
 - Auto-close after 7 days resolved is not yet a scheduled job (would need a Supabase Edge Function or cron).
+
+---
+
+## Onboarding bootstrap
+
+Use the bootstrap endpoint once to create the first tenant and attach the current user as an admin agent. The request must include both a Supabase access token and the one-time bootstrap secret.
+
+```
+POST /api/admin/bootstrap
+Authorization: Bearer <SUPABASE_ACCESS_TOKEN>
+X-Bootstrap-Secret: <BOOTSTRAP_ADMIN_SECRET>
+
+{
+  "tenant_name": "Acme Support",
+  "allowed_domain": "example.com"
+}
+```
+
+---
+
+## Agent invites
+
+Admins can generate invite tokens for agents, and the invited user can redeem the token after signing up.
+
+```
+POST /api/agents/invite
+Authorization: Bearer <SUPABASE_ACCESS_TOKEN>
+
+{
+  "tenant_id": "<TENANT_ID>",
+  "email": "agent@example.com",
+  "role": "agent"
+}
+```
+
+```
+POST /api/agents/accept-invite
+Authorization: Bearer <SUPABASE_ACCESS_TOKEN>
+
+{
+  "token": "<INVITE_TOKEN>"
+}
+```

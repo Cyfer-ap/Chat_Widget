@@ -120,7 +120,7 @@ export default function ConversationPage() {
       let conversationQuery = supabase
         .from("conversations")
         .select(
-          "id, tenant_id, visitor_id, status, created_at, subject, resolved_at, last_activity_at"
+          "id, tenant_id, visitor_id, status, created_at, last_message_at, subject, resolved_at, last_activity_at"
         )
         .eq("id", conversationId);
 
