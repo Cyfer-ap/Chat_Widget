@@ -39,6 +39,7 @@ const formatRelativeTime = (value: string) => {
 export default function DashboardPage() {
   const { session, loading } = useSupabaseAuth();
   const [tenantId, setTenantId] = useState("");
+  const [agentTenants, setAgentTenants] = useState<string[]>([]);
   const [filter, setFilter] = useState<"open" | "resolved" | "closed" | "all">(
     "open"
   );
@@ -52,16 +53,69 @@ export default function DashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
 
+  // On mount, keep the previous tenant if it was one of the agent's tenants
   useEffect(() => {
     const stored = localStorage.getItem(TENANT_STORAGE_KEY);
     if (stored) setTenantId(stored);
   }, []);
 
+  // Persist tenant selection locally (but will be overridden by agent tenancy check)
   useEffect(() => {
-    localStorage.setItem(TENANT_STORAGE_KEY, tenantId);
+    if (tenantId) localStorage.setItem(TENANT_STORAGE_KEY, tenantId);
   }, [tenantId]);
 
-  const canLoad = useMemo(() => Boolean(session), [session]);
+  // When session is available, fetch the list of tenants this agent is allowed to view
+  useEffect(() => {
+    if (!session) return;
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setError("Missing Supabase environment variables.");
+      return;
+    }
+
+    (async () => {
+      try {
+        // fetch agent rows for this user
+        const { data, error: agentError } = await supabase
+          .from("agents")
+          .select("tenant_id")
+          .eq("user_id", session.user.id);
+
+        if (agentError) {
+          setError(agentError.message);
+          return;
+        }
+
+        const tenantIds = (data ?? []).map((r: any) => r.tenant_id).filter(Boolean);
+        const uniqueTenantIds = Array.from(new Set(tenantIds));
+
+        if (uniqueTenantIds.length === 0) {
+          // user has no tenant access — avoid showing all tenants
+          setError(
+            "Your account is not associated with any tenant. Contact an admin to be added."
+          );
+          setAgentTenants([]);
+          setTenantId("");
+          return;
+        }
+
+        setAgentTenants(uniqueTenantIds);
+
+        // If localStorage had a tenant that is allowed, keep it; otherwise default to first allowed tenant
+        const stored = localStorage.getItem(TENANT_STORAGE_KEY);
+        if (stored && uniqueTenantIds.includes(stored)) {
+          setTenantId(stored);
+        } else {
+          setTenantId(uniqueTenantIds[0]);
+        }
+      } catch (err: any) {
+        setError(err?.message ?? String(err));
+      }
+    })();
+  }, [session]);
+
+  const canLoad = useMemo(() => Boolean(session && tenantId), [session, tenantId]);
 
   useEffect(() => {
     if (!canLoad) return;
@@ -240,16 +294,10 @@ export default function DashboardPage() {
               return prev;
             }
 
-            const updated = {
-              ...prev[idx],
-              last_message_at: message.created_at,
-              status:
-                message.sender_type === "visitor" ? "open" : prev[idx].status,
-            };
-
-            const next = prev.slice();
-            next.splice(idx, 1);
-            next.unshift(updated);
+            // bump to top
+            const next = [...prev];
+            const [item] = next.splice(idx, 1);
+            next.unshift(item);
             return next;
           });
         }
@@ -257,9 +305,9 @@ export default function DashboardPage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      void channel.unsubscribe();
     };
-  }, [canLoad, tenantId, filter]);
+  }, [canLoad, filter, tenantId]);
 
   if (loading) {
     return (
@@ -301,14 +349,30 @@ export default function DashboardPage() {
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <ThemeToggle />
-              <input
-                type="text"
-                placeholder="Tenant ID"
-                value={tenantId}
-                onChange={(event) => setTenantId(event.target.value)}
-                className="w-full rounded-md border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 sm:w-64"
-                aria-label="Tenant ID"
-              />
+              {/* Tenant selector: show dropdown if the agent has multiple tenants, otherwise read-only input. */}
+              {agentTenants.length > 1 ? (
+                <select
+                  value={tenantId}
+                  onChange={(e) => setTenantId(e.target.value)}
+                  className="w-full rounded-md border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-sm text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 sm:w-64"
+                  aria-label="Tenant ID"
+                >
+                  {agentTenants.map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Tenant ID"
+                  value={tenantId}
+                  readOnly
+                  className="w-full rounded-md border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 sm:w-64"
+                  aria-label="Tenant ID"
+                />
+              )}
               <div
                 className="flex w-full flex-wrap gap-1 rounded-md border border-[color:var(--border)] bg-[color:var(--card)] p-1 sm:w-auto sm:flex-nowrap"
                 role="group"
