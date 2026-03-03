@@ -1,0 +1,43 @@
+name: Apply Supabase Migrations
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply-migrations:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply SQL migrations
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -e
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "Missing SUPABASE_DB_URL secret. Set it in the repository secrets and re-run the workflow." >&2
+            exit 1
+          fi
+
+          echo "Applying migrations from supabase/migrations in lexicographic order"
+          for f in supabase/migrations/*.sql; do
+            if [ -f "$f" ]; then
+              echo "--- Applying $f ---"
+              psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+            fi
+          done
+
+          echo "Applying supabase/rls.sql (RLS and policies)"
+          if [ -f supabase/rls.sql ]; then
+            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/rls.sql
+          fi
+
+          echo "All migrations applied successfully."
+

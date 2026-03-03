@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
 import { verifyAgentForTenant } from '@/lib/tenantAuth';
+import { auditLog, info } from '@/lib/logger';
 
 interface InvitePayload {
   tenant_id: string;
@@ -50,6 +51,14 @@ export async function POST(request: Request) {
 
   const origin = request.headers.get('origin');
   const inviteUrl = origin ? `${origin}/invite?token=${token}` : null;
+
+  // Audit log
+  await auditLog(tenantId, agentCheck.userId, 'agent_invite.create', {
+    email,
+    role,
+    invite_url: inviteUrl,
+  });
+  info('Agent invite created', { tenantId, email, role });
 
   return NextResponse.json({ token, invite_url: inviteUrl, role, email });
 }
