@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { verifyAgentForTenant } from "@/lib/tenantAuth";
 
 interface InvitePayload {
   tenant_id: string;
@@ -8,34 +9,7 @@ interface InvitePayload {
   role?: string;
 }
 
-function getBearerToken(request: Request) {
-  const authHeader = request.headers.get("authorization") ?? "";
-  const [scheme, token] = authHeader.split(" ");
-  if (scheme?.toLowerCase() !== "bearer" || !token) return null;
-  return token;
-}
-
 export async function POST(request: Request) {
-  const accessToken = getBearerToken(request);
-  if (!accessToken) {
-    return NextResponse.json({ error: "Missing access token." }, { status: 401 });
-  }
-
-  const supabase = getSupabaseServerClient();
-  if (!supabase) {
-    return NextResponse.json(
-      { error: "Server is missing Supabase service credentials." },
-      { status: 500 }
-    );
-  }
-
-  const { data: userData, error: userError } = await supabase.auth.getUser(
-    accessToken
-  );
-  if (userError || !userData?.user) {
-    return NextResponse.json({ error: "Invalid access token." }, { status: 401 });
-  }
-
   let payload: InvitePayload | null = null;
   try {
     payload = (await request.json()) as InvitePayload;
@@ -57,19 +31,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: agentRow, error: agentError } = await supabase
-    .from("agents")
-    .select("role")
-    .eq("tenant_id", tenantId)
-    .eq("user_id", userData.user.id)
-    .maybeSingle();
+  const agentCheck = await verifyAgentForTenant(request, tenantId, true);
+  if (agentCheck instanceof NextResponse) return agentCheck;
 
-  if (agentError) {
-    return NextResponse.json({ error: agentError.message }, { status: 500 });
-  }
-
-  if (!agentRow || agentRow.role !== "admin") {
-    return NextResponse.json({ error: "Admin role required." }, { status: 403 });
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "Server is missing Supabase service credentials." },
+      { status: 500 }
+    );
   }
 
   const token = randomUUID();
