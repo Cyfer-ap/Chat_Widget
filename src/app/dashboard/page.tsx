@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { getSupabaseClient } from "@/lib/supabaseClient";
-import { useSupabaseAuth } from "@/lib/useAuth";
-import type { Conversation, Message } from "@/lib/types";
-import ThemeToggle from "@/components/ThemeToggle";
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { getSupabaseClient } from '@/lib/supabaseClient';
+import { useSupabaseAuth } from '@/lib/useAuth';
+import type { Conversation, Message } from '@/lib/types';
+import ThemeToggle from '@/components/ThemeToggle';
 
-const TENANT_STORAGE_KEY = "chat_widget_tenant_id";
-const DASHBOARD_LAST_READ_KEY = "chat_dashboard_last_read";
+const TENANT_STORAGE_KEY = 'chat_widget_tenant_id';
+const DASHBOARD_LAST_READ_KEY = 'chat_dashboard_last_read';
 
 const getLastReadMap = (): Record<string, string> => {
   const raw = localStorage.getItem(DASHBOARD_LAST_READ_KEY);
@@ -27,7 +27,7 @@ const setLastReadMap = (next: Record<string, string>) => {
 const formatRelativeTime = (value: string) => {
   const diffMs = Date.now() - new Date(value).getTime();
   const diffMinutes = Math.floor(diffMs / 60000);
-  if (diffMinutes < 1) return "now";
+  if (diffMinutes < 1) return 'now';
   if (diffMinutes < 60) return `${diffMinutes}m`;
   const diffHours = Math.floor(diffMinutes / 60);
   if (diffHours < 24) return `${diffHours}h`;
@@ -38,17 +38,13 @@ const formatRelativeTime = (value: string) => {
 
 export default function DashboardPage() {
   const { session, loading } = useSupabaseAuth();
-  const [tenantId, setTenantId] = useState("");
+  const [tenantId, setTenantId] = useState('');
   const [agentTenants, setAgentTenants] = useState<string[]>([]);
-  const [filter, setFilter] = useState<"open" | "resolved" | "closed" | "all">(
-    "open"
-  );
+  const [filter, setFilter] = useState<'open' | 'resolved' | 'closed' | 'all'>('open');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [latestMessages, setLatestMessages] = useState<Record<string, Message>>(
-    {}
-  );
+  const [latestMessages, setLatestMessages] = useState<Record<string, Message>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -70,7 +66,7 @@ export default function DashboardPage() {
 
     const supabase = getSupabaseClient();
     if (!supabase) {
-      setError("Missing Supabase environment variables.");
+      setError('Missing Supabase environment variables.');
       return;
     }
 
@@ -78,9 +74,9 @@ export default function DashboardPage() {
       try {
         // fetch agent rows for this user
         const { data, error: agentError } = await supabase
-          .from("agents")
-          .select("tenant_id")
-          .eq("user_id", session.user.id);
+          .from('agents')
+          .select('tenant_id')
+          .eq('user_id', session.user.id);
 
         if (agentError) {
           setError(agentError.message);
@@ -92,11 +88,9 @@ export default function DashboardPage() {
 
         if (uniqueTenantIds.length === 0) {
           // user has no tenant access — avoid showing all tenants
-          setError(
-            "Your account is not associated with any tenant. Contact an admin to be added."
-          );
+          setError('Your account is not associated with any tenant. Contact an admin to be added.');
           setAgentTenants([]);
-          setTenantId("");
+          setTenantId('');
           return;
         }
 
@@ -122,7 +116,7 @@ export default function DashboardPage() {
 
     const supabase = getSupabaseClient();
     if (!supabase) {
-      setError("Missing Supabase environment variables.");
+      setError('Missing Supabase environment variables.');
       return;
     }
 
@@ -134,18 +128,18 @@ export default function DashboardPage() {
       setError(null);
 
       let query = supabase
-        .from("conversations")
+        .from('conversations')
         .select(
-          "id, tenant_id, visitor_id, status, created_at, last_message_at, last_activity_at, subject, resolved_at"
+          'id, tenant_id, visitor_id, status, created_at, last_message_at, last_activity_at, subject, resolved_at',
         )
-        .order("last_message_at", { ascending: false });
+        .order('last_message_at', { ascending: false });
 
       if (tenantId) {
-        query = query.eq("tenant_id", tenantId);
+        query = query.eq('tenant_id', tenantId);
       }
 
       const { data, error: queryError } =
-        filter === "all" ? await query : await query.eq("status", filter);
+        filter === 'all' ? await query : await query.eq('status', filter);
 
       if (queryError) {
         setError(queryError.message);
@@ -156,15 +150,13 @@ export default function DashboardPage() {
 
       const conversationsData = data ?? [];
 
-      const conversationIds = conversationsData.map((conversation) =>
-        conversation.id
-      );
+      const conversationIds = conversationsData.map((conversation) => conversation.id);
       if (conversationIds.length > 0) {
         const { data: messageData } = await supabase
-          .from("messages")
-          .select("id, tenant_id, conversation_id, sender_type, body, created_at")
-          .in("conversation_id", conversationIds)
-          .order("created_at", { ascending: false });
+          .from('messages')
+          .select('id, tenant_id, conversation_id, sender_type, body, created_at')
+          .in('conversation_id', conversationIds)
+          .order('created_at', { ascending: false });
 
         if (messageData) {
           const latestMap: Record<string, Message> = {};
@@ -178,19 +170,16 @@ export default function DashboardPage() {
               latestMap[message.conversation_id] = message as Message;
             }
 
-            if (message.sender_type === "visitor") {
+            if (message.sender_type === 'visitor') {
               const lastReadAt = lastReadMap[message.conversation_id];
               if (!lastReadAt || message.created_at > lastReadAt) {
-                unreadMap[message.conversation_id] =
-                  (unreadMap[message.conversation_id] ?? 0) + 1;
+                unreadMap[message.conversation_id] = (unreadMap[message.conversation_id] ?? 0) + 1;
               }
             }
           }
 
           setConversations(
-            conversationsData.filter((conversation) =>
-              withMessages.has(conversation.id)
-            )
+            conversationsData.filter((conversation) => withMessages.has(conversation.id)),
           );
           setLatestMessages(latestMap);
           setUnreadCounts(unreadMap);
@@ -226,10 +215,10 @@ export default function DashboardPage() {
     if (!supabase) return;
 
     const channel = supabase
-      .channel("dashboard-messages")
+      .channel('dashboard-messages')
       .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const message = payload.new as Message;
           if (tenantId && message.tenant_id !== tenantId) return;
@@ -239,53 +228,41 @@ export default function DashboardPage() {
             [message.conversation_id]: message,
           }));
 
-          if (message.sender_type === "visitor") {
+          if (message.sender_type === 'visitor') {
             setUnreadCounts((prev) => ({
               ...prev,
-              [message.conversation_id]:
-                (prev[message.conversation_id] ?? 0) + 1,
+              [message.conversation_id]: (prev[message.conversation_id] ?? 0) + 1,
             }));
           }
 
           setConversations((prev) => {
-            if (message.sender_type === "visitor" && filter === "resolved") {
-              return prev.filter(
-                (conversation) => conversation.id !== message.conversation_id
-              );
+            if (message.sender_type === 'visitor' && filter === 'resolved') {
+              return prev.filter((conversation) => conversation.id !== message.conversation_id);
             }
-            if (message.sender_type === "visitor" && filter === "closed") {
-              return prev.filter(
-                (conversation) => conversation.id !== message.conversation_id
-              );
+            if (message.sender_type === 'visitor' && filter === 'closed') {
+              return prev.filter((conversation) => conversation.id !== message.conversation_id);
             }
 
             const idx = prev.findIndex(
-              (conversation) => conversation.id === message.conversation_id
+              (conversation) => conversation.id === message.conversation_id,
             );
             if (idx === -1) {
               void (async () => {
                 const { data: conversationData } = await supabase
-                  .from("conversations")
+                  .from('conversations')
                   .select(
-                    "id, tenant_id, visitor_id, status, created_at, last_message_at, last_activity_at, subject, resolved_at"
+                    'id, tenant_id, visitor_id, status, created_at, last_message_at, last_activity_at, subject, resolved_at',
                   )
-                  .eq("id", message.conversation_id)
+                  .eq('id', message.conversation_id)
                   .maybeSingle();
 
                 if (!conversationData) return;
-                if (
-                  filter !== "all" &&
-                  conversationData.status !== filter
-                ) {
+                if (filter !== 'all' && conversationData.status !== filter) {
                   return;
                 }
 
                 setConversations((current) => {
-                  if (
-                    current.some(
-                      (conversation) => conversation.id === conversationData.id
-                    )
-                  ) {
+                  if (current.some((conversation) => conversation.id === conversationData.id)) {
                     return current;
                   }
                   return [conversationData as Conversation, ...current];
@@ -300,7 +277,7 @@ export default function DashboardPage() {
             next.unshift(item);
             return next;
           });
-        }
+        },
       )
       .subscribe();
 
@@ -322,9 +299,7 @@ export default function DashboardPage() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="rounded-lg border border-zinc-200 bg-white p-6 text-center">
           <h1 className="text-lg font-semibold text-zinc-900">Agent access</h1>
-          <p className="mt-2 text-sm text-zinc-500">
-            Please sign in to view conversations.
-          </p>
+          <p className="mt-2 text-sm text-zinc-500">Please sign in to view conversations.</p>
           <Link
             href="/login"
             className="mt-4 inline-flex rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white"
@@ -380,44 +355,36 @@ export default function DashboardPage() {
               >
                 <button
                   type="button"
-                  onClick={() => setFilter("open")}
+                  onClick={() => setFilter('open')}
                   className={`rounded-md px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-                    filter === "open"
-                      ? "bg-zinc-900 text-white"
-                      : "text-zinc-600"
+                    filter === 'open' ? 'bg-zinc-900 text-white' : 'text-zinc-600'
                   }`}
                 >
                   Open
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFilter("resolved")}
+                  onClick={() => setFilter('resolved')}
                   className={`rounded-md px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-                    filter === "resolved"
-                      ? "bg-zinc-900 text-white"
-                      : "text-zinc-600"
+                    filter === 'resolved' ? 'bg-zinc-900 text-white' : 'text-zinc-600'
                   }`}
                 >
                   Resolved
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFilter("closed")}
+                  onClick={() => setFilter('closed')}
                   className={`rounded-md px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-                    filter === "closed"
-                      ? "bg-zinc-900 text-white"
-                      : "text-zinc-600"
+                    filter === 'closed' ? 'bg-zinc-900 text-white' : 'text-zinc-600'
                   }`}
                 >
                   Closed
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFilter("all")}
+                  onClick={() => setFilter('all')}
                   className={`rounded-md px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-                    filter === "all"
-                      ? "bg-zinc-900 text-white"
-                      : "text-zinc-600"
+                    filter === 'all' ? 'bg-zinc-900 text-white' : 'text-zinc-600'
                   }`}
                 >
                   All
@@ -434,9 +401,7 @@ export default function DashboardPage() {
         </div>
 
         {error ? (
-          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">
-            {error}
-          </p>
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">{error}</p>
         ) : null}
 
         <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card)]">
@@ -456,9 +421,7 @@ export default function DashboardPage() {
                   latestMessage?.created_at ??
                   conversation.last_message_at ??
                   conversation.created_at;
-                const previewText = latestMessage
-                  ? latestMessage.body
-                  : "No messages yet.";
+                const previewText = latestMessage ? latestMessage.body : 'No messages yet.';
                 const unreadCount = unreadCounts[conversation.id] ?? 0;
                 return (
                   <li key={conversation.id} className="p-3 sm:p-4">
@@ -488,11 +451,11 @@ export default function DashboardPage() {
                             </span>
                             <span
                               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                conversation.status === "resolved"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : conversation.status === "closed"
-                                    ? "bg-zinc-200 text-zinc-700"
-                                    : "bg-amber-100 text-amber-700"
+                                conversation.status === 'resolved'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : conversation.status === 'closed'
+                                    ? 'bg-zinc-200 text-zinc-700'
+                                    : 'bg-amber-100 text-amber-700'
                               }`}
                             >
                               {conversation.status}

@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { buildFrameAncestorsCsp } from "@/lib/csp";
-import { verifyWidgetToken } from "@/lib/widgetToken";
+import { NextRequest, NextResponse } from 'next/server';
+import { buildFrameAncestorsCsp } from '@/lib/csp';
+import { verifyWidgetToken } from '@/lib/widgetToken';
 
 export async function middleware(request: NextRequest) {
-  const token = request.nextUrl.searchParams.get("token");
+  const token = request.nextUrl.searchParams.get('token');
 
   let csp = "frame-ancestors 'none';";
   if (token) {
@@ -14,11 +14,10 @@ export async function middleware(request: NextRequest) {
   }
 
   const response = NextResponse.next();
-  response.headers.set("Content-Security-Policy", csp);
+  response.headers.set('Content-Security-Policy', csp);
   return response;
 }
 
 export const config = {
-  matcher: ["/widget"],
+  matcher: ['/widget'],
 };
-

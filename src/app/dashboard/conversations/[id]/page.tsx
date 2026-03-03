@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
-import { getSupabaseClient } from "@/lib/supabaseClient";
-import { useSupabaseAuth } from "@/lib/useAuth";
-import type { Conversation, Message } from "@/lib/types";
-import ThemeToggle from "@/components/ThemeToggle";
+import Link from 'next/link';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { getSupabaseClient } from '@/lib/supabaseClient';
+import { useSupabaseAuth } from '@/lib/useAuth';
+import type { Conversation, Message } from '@/lib/types';
+import ThemeToggle from '@/components/ThemeToggle';
 
-const TENANT_STORAGE_KEY = "chat_widget_tenant_id";
-const DASHBOARD_LAST_READ_KEY = "chat_dashboard_last_read";
+const TENANT_STORAGE_KEY = 'chat_widget_tenant_id';
+const DASHBOARD_LAST_READ_KEY = 'chat_dashboard_last_read';
 
 const getLastReadMap = (): Record<string, string> => {
   const raw = localStorage.getItem(DASHBOARD_LAST_READ_KEY);
@@ -38,34 +38,30 @@ const isSameDay = (left: string, right: string) => {
 const formatDayLabel = (value: string) => {
   const date = new Date(value);
   const today = new Date();
-  if (isSameDay(value, today.toISOString())) return "Today";
+  if (isSameDay(value, today.toISOString())) return 'Today';
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
-  if (isSameDay(value, yesterday.toISOString())) return "Yesterday";
+  if (isSameDay(value, yesterday.toISOString())) return 'Yesterday';
   return date.toLocaleDateString();
 };
 
 function appendMessage(
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-  message: Message
+  message: Message,
 ) {
   setMessages((prev) =>
-    prev.some((existing) => existing.id === message.id)
-      ? prev
-      : [...prev, message]
+    prev.some((existing) => existing.id === message.id) ? prev : [...prev, message],
   );
 }
 
 function mergeMessages(
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-  incoming: Message[]
+  incoming: Message[],
 ) {
   setMessages((prev) => {
     const byId = new Map(prev.map((item) => [item.id, item]));
     for (const msg of incoming) byId.set(msg.id, msg);
-    return Array.from(byId.values()).sort((a, b) =>
-      a.created_at.localeCompare(b.created_at)
-    );
+    return Array.from(byId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
   });
 }
 
@@ -73,10 +69,10 @@ export default function ConversationPage() {
   const params = useParams();
   const conversationId = params?.id as string | undefined;
   const { session, loading } = useSupabaseAuth();
-  const [tenantId, setTenantId] = useState("");
+  const [tenantId, setTenantId] = useState('');
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
@@ -85,9 +81,9 @@ export default function ConversationPage() {
   const [didInitialScroll, setDidInitialScroll] = useState(false);
   const [remoteTyping, setRemoteTyping] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
-  const typingChannelRef = useRef<
-    ReturnType<NonNullable<ReturnType<typeof getSupabaseClient>>["channel"]> | null
-  >(null);
+  const typingChannelRef = useRef<ReturnType<
+    NonNullable<ReturnType<typeof getSupabaseClient>>['channel']
+  > | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef(0);
 
@@ -96,17 +92,14 @@ export default function ConversationPage() {
     if (stored) setTenantId(stored);
   }, []);
 
-  const canLoad = useMemo(
-    () => Boolean(session && conversationId),
-    [session, conversationId]
-  );
+  const canLoad = useMemo(() => Boolean(session && conversationId), [session, conversationId]);
 
   useEffect(() => {
     if (!canLoad) return;
 
     const supabase = getSupabaseClient();
     if (!supabase) {
-      setError("Missing Supabase environment variables.");
+      setError('Missing Supabase environment variables.');
       return;
     }
 
@@ -118,18 +111,17 @@ export default function ConversationPage() {
       setError(null);
 
       let conversationQuery = supabase
-        .from("conversations")
+        .from('conversations')
         .select(
-          "id, tenant_id, visitor_id, status, created_at, last_message_at, subject, resolved_at, last_activity_at"
+          'id, tenant_id, visitor_id, status, created_at, last_message_at, subject, resolved_at, last_activity_at',
         )
-        .eq("id", conversationId);
+        .eq('id', conversationId);
 
       if (tenantId) {
-        conversationQuery = conversationQuery.eq("tenant_id", tenantId);
+        conversationQuery = conversationQuery.eq('tenant_id', tenantId);
       }
 
-      const { data: conversationData, error: conversationError } =
-        await conversationQuery.single();
+      const { data: conversationData, error: conversationError } = await conversationQuery.single();
 
       if (conversationError) {
         setError(conversationError.message);
@@ -140,13 +132,13 @@ export default function ConversationPage() {
       setConversation(conversationData);
 
       let messageQuery = supabase
-        .from("messages")
-        .select("id, tenant_id, conversation_id, sender_type, body, created_at")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true });
+        .from('messages')
+        .select('id, tenant_id, conversation_id, sender_type, body, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true });
 
       if (tenantId) {
-        messageQuery = messageQuery.eq("tenant_id", tenantId);
+        messageQuery = messageQuery.eq('tenant_id', tenantId);
       }
 
       const { data: messageData, error: messageError } = await messageQuery;
@@ -161,13 +153,13 @@ export default function ConversationPage() {
 
       pollHandle = setInterval(async () => {
         let pollQuery = supabase
-          .from("messages")
-          .select("id, tenant_id, conversation_id, sender_type, body, created_at")
-          .eq("conversation_id", conversationId)
-          .order("created_at", { ascending: true });
+          .from('messages')
+          .select('id, tenant_id, conversation_id, sender_type, body, created_at')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: true });
 
         if (tenantId) {
-          pollQuery = pollQuery.eq("tenant_id", tenantId);
+          pollQuery = pollQuery.eq('tenant_id', tenantId);
         }
 
         const { data: polled } = await pollQuery;
@@ -177,24 +169,24 @@ export default function ConversationPage() {
       channel = supabase
         .channel(`messages:${conversationId}`)
         .on(
-          "postgres_changes",
+          'postgres_changes',
           {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
             filter: `conversation_id=eq.${conversationId}`,
           },
           (payload) => {
             const incoming = payload.new as Message;
             appendMessage(setMessages, incoming);
-            if (incoming.sender_type === "visitor") {
+            if (incoming.sender_type === 'visitor') {
               setConversation((prev) =>
-                prev && prev.status !== "open" && prev.status !== "closed"
-                  ? { ...prev, status: "open" }
-                  : prev
+                prev && prev.status !== 'open' && prev.status !== 'closed'
+                  ? { ...prev, status: 'open' }
+                  : prev,
               );
             }
-          }
+          },
         )
         .subscribe();
     };
@@ -233,8 +225,8 @@ export default function ConversationPage() {
     };
 
     handleScroll();
-    container.addEventListener("scroll", handleScroll);
-    return () => container.removeEventListener("scroll", handleScroll);
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
   useEffect(() => {
@@ -260,10 +252,9 @@ export default function ConversationPage() {
 
     const channel = supabase
       .channel(`typing:${conversationId}`)
-      .on("broadcast", { event: "typing" }, (payload) => {
-        const sender = (payload as { payload?: { sender?: string } }).payload
-          ?.sender;
-        if (sender === "agent") return;
+      .on('broadcast', { event: 'typing' }, (payload) => {
+        const sender = (payload as { payload?: { sender?: string } }).payload?.sender;
+        if (sender === 'agent') return;
 
         setRemoteTyping(true);
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -289,9 +280,9 @@ export default function ConversationPage() {
     lastTypingSentRef.current = now;
 
     typingChannelRef.current?.send({
-      type: "broadcast",
-      event: "typing",
-      payload: { sender: "agent" },
+      type: 'broadcast',
+      event: 'typing',
+      payload: { sender: 'agent' },
     });
   }, [body]);
 
@@ -301,29 +292,29 @@ export default function ConversationPage() {
 
     const supabase = getSupabaseClient();
     if (!supabase) {
-      setError("Missing Supabase environment variables.");
+      setError('Missing Supabase environment variables.');
       return;
     }
 
     const nextTenantId = tenantId || conversation?.tenant_id;
     if (!nextTenantId) {
-      setError("Missing tenant ID for this conversation.");
+      setError('Missing tenant ID for this conversation.');
       return;
     }
 
     const nextBody = body.trim();
-    setBody("");
+    setBody('');
     setSending(true);
 
     const { data, error: insertError } = await supabase
-      .from("messages")
+      .from('messages')
       .insert({
         tenant_id: nextTenantId,
         conversation_id: conversationId,
-        sender_type: "agent",
+        sender_type: 'agent',
         body: nextBody,
       })
-      .select("id, tenant_id, conversation_id, sender_type, body, created_at")
+      .select('id, tenant_id, conversation_id, sender_type, body, created_at')
       .single();
 
     if (insertError) {
@@ -336,31 +327,31 @@ export default function ConversationPage() {
     setSending(false);
   };
 
-  const updateStatus = async (nextStatus: Conversation["status"]) => {
+  const updateStatus = async (nextStatus: Conversation['status']) => {
     if (!conversation) return;
 
-    if (conversation.status === "closed" && nextStatus !== "closed") {
-      setError("Closed conversations cannot be reopened.");
+    if (conversation.status === 'closed' && nextStatus !== 'closed') {
+      setError('Closed conversations cannot be reopened.');
       return;
     }
 
     const supabase = getSupabaseClient();
     if (!supabase) {
-      setError("Missing Supabase environment variables.");
+      setError('Missing Supabase environment variables.');
       return;
     }
 
     const nextTenantId = tenantId || conversation.tenant_id;
     if (!nextTenantId) {
-      setError("Missing tenant ID for this conversation.");
+      setError('Missing tenant ID for this conversation.');
       return;
     }
 
     const { error: updateError } = await supabase
-      .from("conversations")
+      .from('conversations')
       .update({ status: nextStatus })
-      .eq("id", conversation.id)
-      .eq("tenant_id", nextTenantId);
+      .eq('id', conversation.id)
+      .eq('tenant_id', nextTenantId);
 
     if (updateError) {
       setError(updateError.message);
@@ -372,11 +363,11 @@ export default function ConversationPage() {
 
   const toggleStatus = async () => {
     if (!conversation) return;
-    if (conversation.status === "closed") {
-      setError("Closed conversations cannot be reopened.");
+    if (conversation.status === 'closed') {
+      setError('Closed conversations cannot be reopened.');
       return;
     }
-    await updateStatus(conversation.status === "open" ? "resolved" : "open");
+    await updateStatus(conversation.status === 'open' ? 'resolved' : 'open');
   };
 
   if (loading) {
@@ -392,9 +383,7 @@ export default function ConversationPage() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="rounded-lg border border-zinc-200 bg-white p-6 text-center">
           <h1 className="text-lg font-semibold text-zinc-900">Agent access</h1>
-          <p className="mt-2 text-sm text-zinc-500">
-            Please sign in to view this conversation.
-          </p>
+          <p className="mt-2 text-sm text-zinc-500">Please sign in to view this conversation.</p>
           <Link
             href="/login"
             className="mt-4 inline-flex rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white"
@@ -414,35 +403,33 @@ export default function ConversationPage() {
             <Link href="/dashboard" className="text-sm text-[color:var(--muted-foreground)]">
               ← Back to inbox
             </Link>
-            <h1 className="text-2xl font-semibold">
-              Conversation {conversationId?.slice(0, 8)}
-            </h1>
+            <h1 className="text-2xl font-semibold">Conversation {conversationId?.slice(0, 8)}</h1>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <span
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                conversation?.status === "resolved"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : conversation?.status === "closed"
-                    ? "bg-zinc-200 text-zinc-700"
-                    : "bg-amber-100 text-amber-700"
+                conversation?.status === 'resolved'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : conversation?.status === 'closed'
+                    ? 'bg-zinc-200 text-zinc-700'
+                    : 'bg-amber-100 text-amber-700'
               }`}
             >
-              {conversation?.status ?? "open"}
+              {conversation?.status ?? 'open'}
             </span>
             <button
               type="button"
               onClick={toggleStatus}
               className="rounded-md border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-sm text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
             >
-              {conversation?.status === "open" ? "Resolve" : "Reopen"}
+              {conversation?.status === 'open' ? 'Resolve' : 'Reopen'}
             </button>
             <button
               type="button"
               onClick={() => {
-                if (window.confirm("Close this conversation? This cannot be reopened.")) {
-                  void updateStatus("closed");
+                if (window.confirm('Close this conversation? This cannot be reopened.')) {
+                  void updateStatus('closed');
                 }
               }}
               className="rounded-md border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-sm text-[color:var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
@@ -453,9 +440,7 @@ export default function ConversationPage() {
         </header>
 
         {error ? (
-          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">
-            {error}
-          </p>
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">{error}</p>
         ) : null}
 
         <div className="flex-1 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)]">
@@ -472,14 +457,12 @@ export default function ConversationPage() {
                 messages.map((message, index) => {
                   const previous = index > 0 ? messages[index - 1] : null;
                   const showDaySeparator =
-                    !previous ||
-                    !isSameDay(previous.created_at, message.created_at);
-                  const isSameSender =
-                    previous?.sender_type === message.sender_type;
-                  const isAgent = message.sender_type === "agent";
+                    !previous || !isSameDay(previous.created_at, message.created_at);
+                  const isSameSender = previous?.sender_type === message.sender_type;
+                  const isAgent = message.sender_type === 'agent';
                   const shouldShowUnreadDivider =
                     unreadCutoff &&
-                    message.sender_type === "visitor" &&
+                    message.sender_type === 'visitor' &&
                     message.created_at > unreadCutoff &&
                     (!previous || previous.created_at <= unreadCutoff);
 
@@ -503,33 +486,27 @@ export default function ConversationPage() {
                       ) : null}
                       <div
                         className={`flex ${
-                          isAgent ? "justify-end" : "justify-start"
-                        } ${isSameSender ? "mt-1" : "mt-4"}`}
+                          isAgent ? 'justify-end' : 'justify-start'
+                        } ${isSameSender ? 'mt-1' : 'mt-4'}`}
                       >
                         <div className="max-w-[75%]">
                           <div
                             className={`rounded-2xl px-4 py-2 text-sm shadow-sm ${
                               isAgent
-                                ? "bg-[color:var(--primary)] text-[color:var(--primary-foreground)]"
-                                : "bg-[color:var(--muted)] text-[color:var(--foreground)]"
-                            } ${
-                              isSameSender
-                                ? isAgent
-                                  ? "rounded-tr-md"
-                                  : "rounded-tl-md"
-                                : ""
-                            }`}
+                                ? 'bg-[color:var(--primary)] text-[color:var(--primary-foreground)]'
+                                : 'bg-[color:var(--muted)] text-[color:var(--foreground)]'
+                            } ${isSameSender ? (isAgent ? 'rounded-tr-md' : 'rounded-tl-md') : ''}`}
                           >
                             {message.body}
                           </div>
                           <div
                             className={`mt-1 text-[11px] text-[color:var(--muted-foreground)] ${
-                              isAgent ? "text-right" : "text-left"
+                              isAgent ? 'text-right' : 'text-left'
                             }`}
                           >
                             {new Date(message.created_at).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
+                              hour: '2-digit',
+                              minute: '2-digit',
                             })}
                           </div>
                         </div>
@@ -578,12 +555,12 @@ export default function ConversationPage() {
             type="submit"
             className={`rounded-md px-4 py-2 text-sm font-medium text-[color:var(--primary-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
               sending || !body.trim()
-                ? "cursor-not-allowed bg-zinc-400"
-                : "bg-[color:var(--primary)]"
+                ? 'cursor-not-allowed bg-zinc-400'
+                : 'bg-[color:var(--primary)]'
             }`}
             disabled={sending || !body.trim()}
           >
-            {sending ? "Sending..." : "Send"}
+            {sending ? 'Sending...' : 'Send'}
           </button>
         </form>
       </div>

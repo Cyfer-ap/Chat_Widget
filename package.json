@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test --import tsx"
+    "test": "node --test --import tsx",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,scss,md}\" && node scripts/format-sql.js",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,scss,md}\" && node scripts/format-sql.js --check",
+    "format:sql": "node scripts/format-sql.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
@@ -24,8 +27,10 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "prettier": "^3.0.0",
+    "sql-formatter": "^11.0.2",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "typescript": "^5"
   }
 }

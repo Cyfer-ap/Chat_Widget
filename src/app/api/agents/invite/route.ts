@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
-import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { verifyAgentForTenant } from "@/lib/tenantAuth";
+import { NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
+import { getSupabaseServerClient } from '@/lib/supabaseServer';
+import { verifyAgentForTenant } from '@/lib/tenantAuth';
 
 interface InvitePayload {
   tenant_id: string;
@@ -14,21 +14,15 @@ export async function POST(request: Request) {
   try {
     payload = (await request.json()) as InvitePayload;
   } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON payload." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'Invalid JSON payload.' }, { status: 400 });
   }
 
   const tenantId = payload?.tenant_id?.trim();
   const email = payload?.email?.trim().toLowerCase();
-  const role = payload?.role?.trim() || "agent";
+  const role = payload?.role?.trim() || 'agent';
 
   if (!tenantId || !email) {
-    return NextResponse.json(
-      { error: "Missing tenant_id or email." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'Missing tenant_id or email.' }, { status: 400 });
   }
 
   const agentCheck = await verifyAgentForTenant(request, tenantId, true);
@@ -37,13 +31,13 @@ export async function POST(request: Request) {
   const supabase = getSupabaseServerClient();
   if (!supabase) {
     return NextResponse.json(
-      { error: "Server is missing Supabase service credentials." },
-      { status: 500 }
+      { error: 'Server is missing Supabase service credentials.' },
+      { status: 500 },
     );
   }
 
   const token = randomUUID();
-  const { error: inviteError } = await supabase.from("agent_invites").insert({
+  const { error: inviteError } = await supabase.from('agent_invites').insert({
     token,
     tenant_id: tenantId,
     email,
@@ -54,9 +48,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: inviteError.message }, { status: 500 });
   }
 
-  const origin = request.headers.get("origin");
+  const origin = request.headers.get('origin');
   const inviteUrl = origin ? `${origin}/invite?token=${token}` : null;
 
   return NextResponse.json({ token, invite_url: inviteUrl, role, email });
 }
-

@@ -3,9 +3,8 @@
 -- conversation's status and raises an exception if it's 'closed'. This enforces
 -- "closed means closed" at the DB level for any client (agents, service role,
 -- etc.).
-
-create or replace function prevent_messages_on_closed_conversation()
-returns trigger as $$
+create
+or replace function prevent_messages_on_closed_conversation () returns trigger as $$
 declare
   conv_status text;
 begin
@@ -27,10 +26,13 @@ begin
 end;
 $$ language plpgsql;
 
--- Ensure we don't create duplicate triggers when re-running migrations
-drop trigger if exists prevent_messages_on_closed_conversation on messages;
-create trigger prevent_messages_on_closed_conversation
-  before insert on messages
-  for each row
-  execute function prevent_messages_on_closed_conversation();
 
+-- Ensure we don't create duplicate triggers when re-running migrations
+drop trigger
+  if exists prevent_messages_on_closed_conversation on messages;
+
+
+create trigger
+  prevent_messages_on_closed_conversation before insert on messages for each row
+execute
+  function prevent_messages_on_closed_conversation ();

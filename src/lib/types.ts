@@ -1,5 +1,5 @@
-export type ConversationStatus = "open" | "pending" | "resolved" | "closed";
-export type SenderType = "visitor" | "agent";
+export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'closed';
+export type SenderType = 'visitor' | 'agent';
 
 export interface Conversation {
   id: string;

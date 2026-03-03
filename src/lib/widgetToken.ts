@@ -1,50 +1,50 @@
 const TOKEN_TTL_MS = 5 * 60 * 1000;
 
 function base64UrlEncode(input: string): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(input, "utf8").toString("base64url");
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(input, 'utf8').toString('base64url');
   }
   const base64 = btoa(input);
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 function base64UrlDecode(input: string): string {
-  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized + "===".slice((normalized.length + 3) % 4);
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(padded, "base64").toString("utf8");
+  const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '==='.slice((normalized.length + 3) % 4);
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(padded, 'base64').toString('utf8');
   }
   return atob(padded);
 }
 
 function getSecret(): string {
   const secret = process.env.WIDGET_TOKEN_SECRET;
-  if (!secret) throw new Error("Missing WIDGET_TOKEN_SECRET env variable.");
+  if (!secret) throw new Error('Missing WIDGET_TOKEN_SECRET env variable.');
   return secret;
 }
 
 function base64UrlEncodeBytes(bytes: Uint8Array): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(bytes).toString("base64url");
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes).toString('base64url');
   }
-  let binary = "";
+  let binary = '';
   for (const byte of bytes) {
     binary += String.fromCharCode(byte);
   }
   const base64 = btoa(binary);
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 async function hmac(secret: string, data: string): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
-    "raw",
+    'raw',
     encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
+    { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ["sign"]
+    ['sign'],
   );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
   return base64UrlEncodeBytes(new Uint8Array(signature));
 }
 
@@ -54,10 +54,7 @@ export interface WidgetTokenPayload {
   exp: number;
 }
 
-export async function signWidgetToken(
-  tenantId: string,
-  origin: string
-): Promise<string> {
+export async function signWidgetToken(tenantId: string, origin: string): Promise<string> {
   const payload: WidgetTokenPayload = {
     tenantId,
     origin,
@@ -68,11 +65,9 @@ export async function signWidgetToken(
   return `${body}.${sig}`;
 }
 
-export async function verifyWidgetToken(
-  token: string
-): Promise<WidgetTokenPayload | null> {
+export async function verifyWidgetToken(token: string): Promise<WidgetTokenPayload | null> {
   try {
-    const [body, sig] = token.split(".");
+    const [body, sig] = token.split('.');
     if (!body || !sig) return null;
 
     const expected = await hmac(getSecret(), body);

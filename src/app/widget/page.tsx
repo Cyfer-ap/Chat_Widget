@@ -1,19 +1,18 @@
-"use client";
+'use client';
 
-import { Suspense, useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
-import { getSupabaseClient } from "@/lib/supabaseClient";
-import type { Conversation, Message } from "@/lib/types";
-import ThemeToggle from "@/components/ThemeToggle";
+import { Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { getSupabaseClient } from '@/lib/supabaseClient';
+import type { Conversation, Message } from '@/lib/types';
+import ThemeToggle from '@/components/ThemeToggle';
 
-const ANON_STORAGE_KEY = "chat_widget_anon_id";
-const WIDGET_LAST_READ_KEY = "chat_widget_last_read_at";
+const ANON_STORAGE_KEY = 'chat_widget_anon_id';
+const WIDGET_LAST_READ_KEY = 'chat_widget_last_read_at';
 const NEW_TICKET_AFTER_DAYS = 14;
 const REOPEN_WINDOW_DAYS = 7;
 const CONVERSATION_SELECT =
-  "id, tenant_id, visitor_id, status, created_at, last_message_at, last_activity_at, subject, resolved_at";
-const getLastReadKey = (conversationId: string) =>
-  `${WIDGET_LAST_READ_KEY}:${conversationId}`;
+  'id, tenant_id, visitor_id, status, created_at, last_message_at, last_activity_at, subject, resolved_at';
+const getLastReadKey = (conversationId: string) => `${WIDGET_LAST_READ_KEY}:${conversationId}`;
 
 const daysSince = (value?: string | null) => {
   if (!value) return null;
@@ -23,16 +22,14 @@ const daysSince = (value?: string | null) => {
 
 const shouldStartNewConversation = (conversation: Conversation | null) => {
   if (!conversation) return true;
-  if (conversation.status === "open" || conversation.status === "pending") {
+  if (conversation.status === 'open' || conversation.status === 'pending') {
     return false;
   }
-  if (conversation.status === "closed") return true;
+  if (conversation.status === 'closed') return true;
 
-  if (conversation.status === "resolved") {
+  if (conversation.status === 'resolved') {
     const resolvedDays = daysSince(
-      conversation.resolved_at ??
-        conversation.last_activity_at ??
-        conversation.created_at
+      conversation.resolved_at ?? conversation.last_activity_at ?? conversation.created_at,
     );
     if (resolvedDays === null) return true;
     if (resolvedDays <= REOPEN_WINDOW_DAYS) return false;
@@ -44,36 +41,29 @@ const shouldStartNewConversation = (conversation: Conversation | null) => {
 
 function appendMessage(
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-  message: Message
+  message: Message,
 ) {
   setMessages((prev) =>
-    prev.some((existing) => existing.id === message.id)
-      ? prev
-      : [...prev, message]
+    prev.some((existing) => existing.id === message.id) ? prev : [...prev, message],
   );
 }
 
 function WidgetContent() {
   const searchParams = useSearchParams();
-  const tenantId = searchParams.get("tenant") ?? "";
-  const initialToken = searchParams.get("token") ?? "";
+  const tenantId = searchParams.get('tenant') ?? '';
+  const initialToken = searchParams.get('token') ?? '';
   const [widgetToken, setWidgetToken] = useState(initialToken);
   const [authorized, setAuthorized] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("Checking domain...");
+  const [statusMessage, setStatusMessage] = useState('Checking domain...');
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [activeConversation, setActiveConversation] =
-    useState<Conversation | null>(null);
-  const [previousConversations, setPreviousConversations] = useState<
-    Conversation[]
-  >([]);
-  const [viewingConversationId, setViewingConversationId] = useState<
-    string | null
-  >(null);
+  const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
+  const [previousConversations, setPreviousConversations] = useState<Conversation[]>([]);
+  const [viewingConversationId, setViewingConversationId] = useState<string | null>(null);
   const [viewingMessages, setViewingMessages] = useState<Message[]>([]);
   const [showPreviousList, setShowPreviousList] = useState(false);
   const [visitorId, setVisitorId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState('');
   const [open, setOpen] = useState(false);
   const [initializing, setInitializing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -83,9 +73,9 @@ function WidgetContent() {
   const [didInitialScroll, setDidInitialScroll] = useState(false);
   const [remoteTyping, setRemoteTyping] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
-  const typingChannelRef = useRef<
-    ReturnType<NonNullable<ReturnType<typeof getSupabaseClient>>["channel"]> | null
-  >(null);
+  const typingChannelRef = useRef<ReturnType<
+    NonNullable<ReturnType<typeof getSupabaseClient>>['channel']
+  > | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef(0);
@@ -97,18 +87,15 @@ function WidgetContent() {
   const conversationSelect = CONVERSATION_SELECT;
 
   const createConversation = useCallback(
-    async (
-      nextVisitorId: string,
-      subject: string = "Support request"
-    ) => {
+    async (nextVisitorId: string, subject: string = 'Support request') => {
       if (!supabase) return null;
 
       const { data, error } = await supabase
-        .from("conversations")
+        .from('conversations')
         .insert({
           tenant_id: tenantId,
           visitor_id: nextVisitorId,
-          status: "open",
+          status: 'open',
           subject,
         })
         .select(conversationSelect)
@@ -121,48 +108,48 @@ function WidgetContent() {
 
       return data as Conversation;
     },
-    [supabase, tenantId, conversationSelect]
+    [supabase, tenantId, conversationSelect],
   );
 
   useEffect(() => {
     // Ensure the iframe document stays transparent; only the widget panel
     // should be visible when open.
-    document.documentElement.style.background = "transparent";
-    document.body.style.background = "transparent";
-    document.body.style.backgroundImage = "none";
+    document.documentElement.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+    document.body.style.backgroundImage = 'none';
   }, []);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (!event.data || event.data.type !== "widget-token") return;
+      if (!event.data || event.data.type !== 'widget-token') return;
       if (event.data.tenant && event.data.tenant !== tenantId) return;
-      if (typeof event.data.token !== "string" || !event.data.token) return;
+      if (typeof event.data.token !== 'string' || !event.data.token) return;
       setWidgetToken(event.data.token);
     };
 
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
   }, [tenantId]);
 
   useEffect(() => {
     const verifyToken = async () => {
       if (!tenantId) {
         setAuthorized(false);
-        setStatusMessage("Missing tenant ID.");
+        setStatusMessage('Missing tenant ID.');
         return;
       }
 
       if (!widgetToken) {
         setAuthorized(false);
-        setStatusMessage("Missing authorization token.");
+        setStatusMessage('Missing authorization token.');
         return;
       }
 
       try {
         const response = await fetch(
           `/api/tenant/verify-token?tenant=${encodeURIComponent(
-            tenantId
-          )}&token=${encodeURIComponent(widgetToken)}`
+            tenantId,
+          )}&token=${encodeURIComponent(widgetToken)}`,
         );
         const data = (await response.json()) as {
           valid: boolean;
@@ -170,14 +157,14 @@ function WidgetContent() {
         };
         if (data.valid) {
           setAuthorized(true);
-          setStatusMessage("");
+          setStatusMessage('');
         } else {
           setAuthorized(false);
-          setStatusMessage(data.message ?? "Unauthorized.");
+          setStatusMessage(data.message ?? 'Unauthorized.');
         }
       } catch {
         setAuthorized(false);
-        setStatusMessage("Unable to verify authorization.");
+        setStatusMessage('Unable to verify authorization.');
       }
     };
 
@@ -193,7 +180,7 @@ function WidgetContent() {
       setInitializing(true);
       const { userId, error: anonError } = await ensureAnonId(supabase);
       if (!userId || anonError) {
-        setStatusMessage(anonError ?? "Unable to start anonymous session.");
+        setStatusMessage(anonError ?? 'Unable to start anonymous session.');
         setInitializing(false);
         return;
       }
@@ -201,19 +188,19 @@ function WidgetContent() {
       const anonId = userId;
 
       const { data: visitor } = await supabase
-        .from("visitors")
-        .select("id")
-        .eq("tenant_id", tenantId)
-        .eq("anon_id", anonId)
+        .from('visitors')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('anon_id', anonId)
         .maybeSingle();
 
       let nextVisitorId: string | null = visitor?.id ?? null;
 
       if (!nextVisitorId) {
         const { data: insertedVisitor, error: visitorError } = await supabase
-          .from("visitors")
+          .from('visitors')
           .insert({ tenant_id: tenantId, anon_id: anonId })
-          .select("id")
+          .select('id')
           .single();
 
         if (visitorError) {
@@ -226,20 +213,19 @@ function WidgetContent() {
       }
 
       if (!nextVisitorId) {
-        setStatusMessage("Unable to resolve visitor session.");
+        setStatusMessage('Unable to resolve visitor session.');
         setInitializing(false);
         return;
       }
 
       setVisitorId(nextVisitorId);
 
-      const { data: conversationsData, error: conversationError } =
-        await supabase
-          .from("conversations")
-          .select(conversationSelect)
-          .eq("tenant_id", tenantId)
-          .eq("visitor_id", nextVisitorId)
-          .order("last_activity_at", { ascending: false });
+      const { data: conversationsData, error: conversationError } = await supabase
+        .from('conversations')
+        .select(conversationSelect)
+        .eq('tenant_id', tenantId)
+        .eq('visitor_id', nextVisitorId)
+        .order('last_activity_at', { ascending: false });
 
       if (conversationError) {
         setStatusMessage(conversationError.message);
@@ -250,17 +236,15 @@ function WidgetContent() {
       const allConversations = conversationsData ?? [];
       const openConversations = allConversations
         .filter(
-          (conversation) =>
-            conversation.status === "open" || conversation.status === "pending"
+          (conversation) => conversation.status === 'open' || conversation.status === 'pending',
         )
         .sort((left, right) =>
           (right.last_activity_at ?? right.created_at).localeCompare(
-            left.last_activity_at ?? left.created_at
-          )
+            left.last_activity_at ?? left.created_at,
+          ),
         );
 
-      let nextActive: Conversation | null =
-        openConversations[0] ?? allConversations[0] ?? null;
+      let nextActive: Conversation | null = openConversations[0] ?? allConversations[0] ?? null;
       if (!openConversations.length && shouldStartNewConversation(nextActive)) {
         nextActive = await createConversation(nextVisitorId);
       }
@@ -272,9 +256,7 @@ function WidgetContent() {
 
       setActiveConversation(nextActive);
       setConversationId(nextActive.id);
-      setPreviousConversations(
-        allConversations.filter((conv) => conv.id !== nextActive?.id)
-      );
+      setPreviousConversations(allConversations.filter((conv) => conv.id !== nextActive?.id));
       setViewingConversationId(null);
       setViewingMessages([]);
       setMessages([]);
@@ -299,10 +281,10 @@ function WidgetContent() {
 
     const loadMessages = async () => {
       const { data: messageData, error: messageError } = await supabase
-        .from("messages")
-        .select("id, tenant_id, conversation_id, sender_type, body, created_at")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true });
+        .from('messages')
+        .select('id, tenant_id, conversation_id, sender_type, body, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true });
 
       if (messageError) {
         setStatusMessage(messageError.message);
@@ -314,8 +296,7 @@ function WidgetContent() {
       const lastReadAt = localStorage.getItem(getLastReadKey(conversationId));
       if (lastReadAt) {
         const unread = (messageData ?? []).filter(
-          (message) =>
-            message.sender_type === "agent" && message.created_at > lastReadAt
+          (message) => message.sender_type === 'agent' && message.created_at > lastReadAt,
         ).length;
         setUnreadCount(unread);
       }
@@ -328,11 +309,11 @@ function WidgetContent() {
     channel = supabase
       .channel(`messages:${conversationId}`)
       .on(
-        "postgres_changes",
+        'postgres_changes',
         {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
@@ -342,8 +323,8 @@ function WidgetContent() {
           setActiveConversation((prev) => {
             if (!prev || prev.id !== conversationId) return prev;
             const nextStatus =
-              incoming.sender_type === "visitor" && prev.status === "resolved"
-                ? "open"
+              incoming.sender_type === 'visitor' && prev.status === 'resolved'
+                ? 'open'
                 : prev.status;
             return {
               ...prev,
@@ -353,19 +334,18 @@ function WidgetContent() {
             };
           });
 
-          if (incoming.sender_type === "agent" && !open) {
+          if (incoming.sender_type === 'agent' && !open) {
             setUnreadCount((prev) => prev + 1);
           }
-        }
+        },
       )
       .subscribe();
 
     typingChannel = supabase
       .channel(`typing:${conversationId}`)
-      .on("broadcast", { event: "typing" }, (payload) => {
-        const sender = (payload as { payload?: { sender?: string } }).payload
-          ?.sender;
-        if (sender === "visitor") return;
+      .on('broadcast', { event: 'typing' }, (payload) => {
+        const sender = (payload as { payload?: { sender?: string } }).payload?.sender;
+        if (sender === 'visitor') return;
 
         setRemoteTyping(true);
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -390,10 +370,10 @@ function WidgetContent() {
 
     const loadViewingMessages = async () => {
       const { data: messageData, error: messageError } = await supabase
-        .from("messages")
-        .select("id, tenant_id, conversation_id, sender_type, body, created_at")
-        .eq("conversation_id", viewingConversationId)
-        .order("created_at", { ascending: true });
+        .from('messages')
+        .select('id, tenant_id, conversation_id, sender_type, body, created_at')
+        .eq('conversation_id', viewingConversationId)
+        .order('created_at', { ascending: true });
 
       if (messageError) {
         setStatusMessage(messageError.message);
@@ -432,8 +412,8 @@ function WidgetContent() {
     };
 
     handleScroll();
-    container.addEventListener("scroll", handleScroll);
-    return () => container.removeEventListener("scroll", handleScroll);
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
   useEffect(() => {
@@ -458,9 +438,9 @@ function WidgetContent() {
     lastTypingSentRef.current = now;
 
     typingChannelRef.current?.send({
-      type: "broadcast",
-      event: "typing",
-      payload: { sender: "visitor" },
+      type: 'broadcast',
+      event: 'typing',
+      payload: { sender: 'visitor' },
     });
   }, [body, conversationId, isViewingPrevious]);
 
@@ -469,28 +449,28 @@ function WidgetContent() {
     if (!conversationId || !body.trim() || isViewingPrevious) return;
 
     if (!supabase) {
-      setStatusMessage("Missing Supabase environment variables.");
+      setStatusMessage('Missing Supabase environment variables.');
       return;
     }
 
     if (!visitorId) {
-      setStatusMessage("Missing visitor session.");
+      setStatusMessage('Missing visitor session.');
       return;
     }
 
     let targetConversationId = conversationId;
 
-    if (activeConversation?.status === "closed") {
+    if (activeConversation?.status === 'closed') {
       if (!visitorId) {
-        setStatusMessage("Missing visitor session.");
+        setStatusMessage('Missing visitor session.');
         return;
       }
 
-      const created = await createConversation(visitorId, "Support request");
+      const created = await createConversation(visitorId, 'Support request');
       if (!created) return;
 
       setPreviousConversations((prev) =>
-        activeConversation ? [activeConversation, ...prev] : prev
+        activeConversation ? [activeConversation, ...prev] : prev,
       );
       setActiveConversation(created);
       setConversationId(created.id);
@@ -499,26 +479,26 @@ function WidgetContent() {
       setMessages([]);
       setUnreadCount(0);
       setUnreadCutoff(null);
-      setStatusMessage("");
+      setStatusMessage('');
       targetConversationId = created.id;
     }
 
     const nextBody = body.trim();
-    setBody("");
+    setBody('');
     setSending(true);
 
     try {
-      const response = await fetch("/api/messages/send", {
-        method: "POST",
+      const response = await fetch('/api/messages/send', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           token: widgetToken,
           tenant_id: tenantId,
           conversation_id: targetConversationId,
           visitor_id: visitorId,
-          sender_type: "visitor",
+          sender_type: 'visitor',
           body: nextBody,
         }),
       });
@@ -529,10 +509,10 @@ function WidgetContent() {
       };
 
       if (!response.ok) {
-        setStatusMessage(responseData.error ?? "Unable to send message.");
+        setStatusMessage(responseData.error ?? 'Unable to send message.');
         if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
         statusTimeoutRef.current = setTimeout(() => {
-          setStatusMessage("");
+          setStatusMessage('');
         }, 2000);
         setSending(false);
         return;
@@ -541,10 +521,10 @@ function WidgetContent() {
       if (responseData.data) appendMessage(setMessages, responseData.data);
       setSending(false);
     } catch {
-      setStatusMessage("Unable to send message.");
+      setStatusMessage('Unable to send message.');
       if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
       statusTimeoutRef.current = setTimeout(() => {
-        setStatusMessage("");
+        setStatusMessage('');
       }, 2000);
       setSending(false);
     }
@@ -570,10 +550,10 @@ function WidgetContent() {
   }
 
   return (
-    <div className={open ? "h-screen w-screen bg-transparent" : "pointer-events-none"}>
+    <div className={open ? 'h-screen w-screen bg-transparent' : 'pointer-events-none'}>
       <div
         className={`fixed bottom-4 right-4 flex flex-col items-end gap-2 ${
-          open ? "pointer-events-auto" : "pointer-events-none"
+          open ? 'pointer-events-auto' : 'pointer-events-none'
         }`}
       >
         {open ? (
@@ -587,7 +567,7 @@ function WidgetContent() {
                   </span>
                 ) : null}
                 <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white/90">
-                  {initializing ? "Connecting" : "Online"}
+                  {initializing ? 'Connecting' : 'Online'}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -648,22 +628,21 @@ function WidgetContent() {
                       >
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-[color:var(--foreground)]">
-                            {conversation.subject ?? "Support request"}
+                            {conversation.subject ?? 'Support request'}
                           </p>
                           <p className="text-[color:var(--muted-foreground)]">
                             {new Date(
-                              conversation.last_activity_at ??
-                                conversation.created_at
+                              conversation.last_activity_at ?? conversation.created_at,
                             ).toLocaleDateString()}
                           </p>
                         </div>
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            conversation.status === "resolved"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : conversation.status === "closed"
-                                ? "bg-zinc-200 text-zinc-700"
-                                : "bg-amber-100 text-amber-700"
+                            conversation.status === 'resolved'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : conversation.status === 'closed'
+                                ? 'bg-zinc-200 text-zinc-700'
+                                : 'bg-amber-100 text-amber-700'
                           }`}
                         >
                           {conversation.status}
@@ -674,9 +653,7 @@ function WidgetContent() {
                 </div>
               ) : displayedMessages.length === 0 ? (
                 <p className="text-[color:var(--muted-foreground)]">
-                  {isViewingPrevious
-                    ? "No messages in this conversation."
-                    : "How can I help?"}
+                  {isViewingPrevious ? 'No messages in this conversation.' : 'How can I help?'}
                 </p>
               ) : (
                 displayedMessages.map((message, index) => {
@@ -684,7 +661,7 @@ function WidgetContent() {
                   const shouldShowUnreadDivider =
                     !isViewingPrevious &&
                     unreadCutoff &&
-                    message.sender_type === "agent" &&
+                    message.sender_type === 'agent' &&
                     message.created_at > unreadCutoff &&
                     (!previous || previous.created_at <= unreadCutoff);
 
@@ -701,9 +678,9 @@ function WidgetContent() {
                       ) : null}
                       <div
                         className={`max-w-[80%] rounded-2xl px-3 py-2 text-[13px] shadow-sm ${
-                          message.sender_type === "visitor"
-                            ? "ml-auto bg-[color:var(--primary)] text-[color:var(--primary-foreground)]"
-                            : "bg-[color:var(--card)] text-[color:var(--foreground)]"
+                          message.sender_type === 'visitor'
+                            ? 'ml-auto bg-[color:var(--primary)] text-[color:var(--primary-foreground)]'
+                            : 'bg-[color:var(--card)] text-[color:var(--foreground)]'
                         }`}
                       >
                         {message.body}
@@ -727,12 +704,12 @@ function WidgetContent() {
             </div>
             <div className="border-t border-[color:var(--border)] bg-[color:var(--card)] p-3">
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                {activeConversation?.status === "resolved" && !isViewingPrevious ? (
+                {activeConversation?.status === 'resolved' && !isViewingPrevious ? (
                   <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-700">
                     ✅ Resolved — reply to reopen
                   </span>
                 ) : null}
-                {activeConversation?.status === "closed" && !isViewingPrevious ? (
+                {activeConversation?.status === 'closed' && !isViewingPrevious ? (
                   <span className="rounded-full bg-zinc-200 px-3 py-1 font-semibold text-zinc-700">
                     Closed — a new conversation will start on reply
                   </span>
@@ -755,9 +732,7 @@ function WidgetContent() {
                     value={body}
                     onChange={(event) => setBody(event.target.value)}
                     placeholder={
-                      isViewingPrevious
-                        ? "Read-only conversation"
-                        : "Type your message..."
+                      isViewingPrevious ? 'Read-only conversation' : 'Type your message...'
                     }
                     className="flex-1 rounded-full border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                     disabled={sending || isViewingPrevious}
@@ -773,12 +748,12 @@ function WidgetContent() {
                   type="submit"
                   className={`rounded-full px-4 py-2 text-sm font-medium text-[color:var(--primary-foreground)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                     sending || !body.trim() || isViewingPrevious
-                      ? "cursor-not-allowed bg-zinc-400"
-                      : "bg-[color:var(--primary)] hover:bg-zinc-800"
+                      ? 'cursor-not-allowed bg-zinc-400'
+                      : 'bg-[color:var(--primary)] hover:bg-zinc-800'
                   }`}
                   disabled={sending || !body.trim() || isViewingPrevious}
                 >
-                  {sending ? "Sending..." : "Send"}
+                  {sending ? 'Sending...' : 'Send'}
                 </button>
               </form>
             )}
@@ -789,7 +764,7 @@ function WidgetContent() {
                   onClick={() => setShowPreviousList((prev) => !prev)}
                   className="text-xs font-medium text-[color:var(--muted-foreground)]"
                 >
-                  {showPreviousList ? "Hide" : "Show"} previous conversations
+                  {showPreviousList ? 'Hide' : 'Show'} previous conversations
                 </button>
                 {isViewingPrevious ? (
                   <button
@@ -808,10 +783,10 @@ function WidgetContent() {
           type="button"
           onClick={() => setOpen((prev) => !prev)}
           className="pointer-events-auto relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-[color:var(--primary)] to-zinc-700 text-sm font-semibold text-[color:var(--primary-foreground)] shadow-lg ring-1 ring-black/10 transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-          aria-label={open ? "Close chat" : "Open chat"}
+          aria-label={open ? 'Close chat' : 'Open chat'}
           aria-expanded={open}
         >
-          {open ? "×" : "Chat"}
+          {open ? '×' : 'Chat'}
           {unreadCount > 0 ? (
             <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[color:var(--accent)] px-1 text-[11px] font-semibold text-[color:var(--accent-foreground)]">
               {unreadCount}
@@ -832,13 +807,12 @@ export default function WidgetPage() {
 }
 
 async function ensureAnonId(supabase: ReturnType<typeof getSupabaseClient>) {
-  if (!supabase) return { userId: null, error: "Missing Supabase client." };
+  if (!supabase) return { userId: null, error: 'Missing Supabase client.' };
 
   const cached = localStorage.getItem(ANON_STORAGE_KEY);
   if (cached) return { userId: cached, error: null };
 
-  const { data: sessionData, error: sessionError } =
-    await supabase.auth.getSession();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) return { userId: null, error: sessionError.message };
 
   if (!sessionData.session) {
@@ -846,8 +820,7 @@ async function ensureAnonId(supabase: ReturnType<typeof getSupabaseClient>) {
     if (signInError) return { userId: null, error: signInError.message };
   }
 
-  const { data: refreshed, error: refreshError } =
-    await supabase.auth.getSession();
+  const { data: refreshed, error: refreshError } = await supabase.auth.getSession();
   if (refreshError) return { userId: null, error: refreshError.message };
 
   const userId = refreshed.session?.user?.id ?? null;

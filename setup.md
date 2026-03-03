@@ -5,6 +5,7 @@ This guide walks through every step to add a new client (tenant), allow their we
 IMPORTANT: Always run SQL in the Supabase SQL editor for your project. Be careful with secrets (do not paste them publicly). If you are unsure which Supabase project the deployed app uses, check `NEXT_PUBLIC_SUPABASE_URL` in your deployment environment.
 
 Table of contents
+
 - Prerequisites
 - Create tenant (SQL)
 - Allowlist embedding domain (SQL)
@@ -19,13 +20,14 @@ Table of contents
 ---
 
 Prerequisites
+
 - Supabase project with migrations applied (see `supabase/migrations/` and `supabase/rls.sql`).
 - The deployment host for your widget (e.g., `https://chat-widget-qqhh.vercel.app`).
 - Admin access to Supabase (or an admin user in `agents` for an existing tenant) to create tenants and invites.
 
 ---
 
-1) Create tenant (SQL)
+1. Create tenant (SQL)
 
 Run this in Supabase SQL editor to create a tenant. Replace `NEW_TENANT_NAME` with a readable name.
 
@@ -46,7 +48,7 @@ VALUES ('NEW_TENANT_ID', 'NEW_TENANT_NAME');
 
 ---
 
-2) Allowlist embedding domain (SQL)
+2. Allowlist embedding domain (SQL)
 
 Add the domain where the widget will be embedded. Use hostname only (no protocol, no trailing slash):
 
@@ -64,9 +66,10 @@ VALUES ('NEW_TENANT_ID', 'localhost');
 
 ---
 
-3) Create agent user
+3. Create agent user
 
 Option A (recommended): create user via Supabase Console (Authentication → Users)
+
 - Email: agent@example.com
 - Password: (choose secure password)
 
@@ -109,6 +112,7 @@ WHERE tenant_id = 'NEW_TENANT_ID';
 4b) Invite flow (recommended for production)
 
 Steps:
+
 1. Admin (existing admin user) requests invite via API.
 2. API returns a token or invite URL.
 3. Agent signs up or signs in and redeems invite (the login page auto-redeem logic will call the accept-invite endpoint once signed in).
@@ -123,6 +127,7 @@ Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body
 ```
 
 Response:
+
 ```
 { "token": "<INVITE_TOKEN>", "invite_url": "https://chat-widget-qqhh.vercel.app/invite?token=<INVITE_TOKEN>", ... }
 ```
@@ -138,7 +143,7 @@ curl -X POST "https://chat-widget-qqhh.vercel.app/api/agents/accept-invite" \
 
 ---
 
-5) Embed the widget (client site)
+5. Embed the widget (client site)
 
 Add loader snippet to the target site (replace NEW_TENANT_ID and WIDGET_HOST):
 
@@ -155,7 +160,7 @@ Add loader snippet to the target site (replace NEW_TENANT_ID and WIDGET_HOST):
 
 ---
 
-6) Verify authorize flow (PowerShell / curl)
+6. Verify authorize flow (PowerShell / curl)
 
 This confirms the server will return an authorized token for the embedding origin.
 
@@ -183,7 +188,7 @@ If `authorized:false` returned, check `tenant_sites` rows and ensure the request
 
 ---
 
-7) Verify agent dashboard access
+7. Verify agent dashboard access
 
 - Sign in as the agent at https://chat-widget-qqhh.vercel.app/login with the agent credentials.
 - Open https://chat-widget-qqhh.vercel.app/dashboard. The Tenant ID field should be prefilled and read-only (if the agent has a single tenant) and the inbox should show only conversations for `NEW_TENANT_ID`.
@@ -192,7 +197,10 @@ To verify server-side enforcement, use the agent access token to attempt to fetc
 
 ```js
 const supabase = window.supabase; // or createClient with NEXT_PUBLIC_* keys
-const { data, error } = await supabase.from('conversations').select('*').eq('tenant_id', 'OTHER_TENANT_ID');
+const { data, error } = await supabase
+  .from('conversations')
+  .select('*')
+  .eq('tenant_id', 'OTHER_TENANT_ID');
 console.log({ data, error });
 ```
 
@@ -200,9 +208,10 @@ Expected: `data` should be empty or `error` should show permission denied.
 
 ---
 
-8) Troubleshooting
+8. Troubleshooting
 
 8.1 DNS/TLS interception (ISP/Corp proxy) — symptoms: "Failed to fetch" in Chrome, or certificate warnings when opening your Supabase host.
+
 - Quick test: in PowerShell run:
 
 ```powershell
@@ -211,21 +220,23 @@ nslookup pcnaxjvtmlhyygmxgivd.supabase.co 1.1.1.1
 
 - If DNS resolves to an unexpected IP and TLS cert is not for the supabase host, your network intercepts TLS. Fix by switching to public DNS (1.1.1.1) or using a different network (mobile hotspot) during setup.
 
-8.2 CORS errors — symptom: "blocked by CORS policy" in Chrome console.
+  8.2 CORS errors — symptom: "blocked by CORS policy" in Chrome console.
+
 - Solution: add all relevant origins to Supabase Auth → Settings → Allowed request origins (include the dashboard and widget origins).
 
-8.3 Invite redemption / role errors
+  8.3 Invite redemption / role errors
+
 - If `/api/agents/invite` returns `Admin role required.`, the token used is not for an admin. Use an admin user's access_token or run the SQL to insert an `agents` row directly.
 
 ---
 
-9) Revoke & rotate keys (security)
+9. Revoke & rotate keys (security)
 
 If you ever exposed `SUPABASE_SERVICE_ROLE_KEY` or other secrets, rotate them immediately in the Supabase dashboard and update your deployment envs (Vercel). Also rotate `WIDGET_TOKEN_SECRET` and `BOOTSTRAP_ADMIN_SECRET` in your deployment environment.
 
 ---
 
-10) Common SQL snippets (copy/paste)
+10. Common SQL snippets (copy/paste)
 
 Create tenant (explicit id):
 
@@ -268,11 +279,10 @@ WHERE tenant_id = '32edbede-8c1a-42a4-9211-1dd52e4ce0b3';
 ---
 
 If you want, I can also:
+
 - Create a small onboarding checklist script (Node.js) that runs the SQL via Supabase admin API to automate tenant creation and agent invites (requires service role key).
 - Add a small UI page in the dashboard to manage tenant allowlist and invites.
-
 
 ---
 
 End of setup guide
-

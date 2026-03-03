@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { signWidgetToken } from "@/lib/widgetToken";
+import { NextResponse } from 'next/server';
+import { getSupabaseServerClient } from '@/lib/supabaseServer';
+import { signWidgetToken } from '@/lib/widgetToken';
 
 function isAllowedDomain(hostname: string, allowedDomain: string) {
   if (!hostname || !allowedDomain) return false;
@@ -11,17 +11,17 @@ function isAllowedDomain(hostname: string, allowedDomain: string) {
 function buildCorsHeaders(originHeader: string | null) {
   const headers = new Headers();
   if (originHeader) {
-    headers.set("Access-Control-Allow-Origin", originHeader);
-    headers.set("Access-Control-Allow-Methods", "GET,OPTIONS");
-    headers.set("Access-Control-Allow-Headers", "Content-Type");
-    headers.set("Access-Control-Max-Age", "86400");
-    headers.set("Vary", "Origin");
+    headers.set('Access-Control-Allow-Origin', originHeader);
+    headers.set('Access-Control-Allow-Methods', 'GET,OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    headers.set('Access-Control-Max-Age', '86400');
+    headers.set('Vary', 'Origin');
   }
   return headers;
 }
 
 export async function OPTIONS(request: Request) {
-  const originHeader = request.headers.get("origin");
+  const originHeader = request.headers.get('origin');
   return new NextResponse(null, {
     status: 204,
     headers: buildCorsHeaders(originHeader),
@@ -30,14 +30,14 @@ export async function OPTIONS(request: Request) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const tenantId = searchParams.get("tenant");
-  const originHeader = request.headers.get("origin");
+  const tenantId = searchParams.get('tenant');
+  const originHeader = request.headers.get('origin');
   const corsHeaders = buildCorsHeaders(originHeader);
 
   if (!tenantId) {
     return NextResponse.json(
-      { authorized: false, message: "Missing tenant." },
-      { headers: corsHeaders }
+      { authorized: false, message: 'Missing tenant.' },
+      { headers: corsHeaders },
     );
   }
 
@@ -45,19 +45,19 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         authorized: false,
-        message: "Missing Origin header. The widget must be embedded in a page.",
+        message: 'Missing Origin header. The widget must be embedded in a page.',
       },
-      { headers: corsHeaders }
+      { headers: corsHeaders },
     );
   }
 
-  let hostname = "";
+  let hostname = '';
   try {
     hostname = new URL(originHeader).hostname;
   } catch {
     return NextResponse.json(
-      { authorized: false, message: "Invalid Origin header." },
-      { headers: corsHeaders }
+      { authorized: false, message: 'Invalid Origin header.' },
+      { headers: corsHeaders },
     );
   }
 
@@ -66,39 +66,34 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         authorized: false,
-        message: "Server is missing Supabase service credentials.",
+        message: 'Server is missing Supabase service credentials.',
       },
-      { headers: corsHeaders }
+      { headers: corsHeaders },
     );
   }
 
   const { data, error } = await supabase
-    .from("tenant_sites")
-    .select("allowed_domain")
-    .eq("tenant_id", tenantId);
+    .from('tenant_sites')
+    .select('allowed_domain')
+    .eq('tenant_id', tenantId);
 
   if (error) {
     return NextResponse.json(
       { authorized: false, message: error.message },
-      { headers: corsHeaders }
+      { headers: corsHeaders },
     );
   }
 
-  const allowed = (data ?? []).some((site) =>
-    isAllowedDomain(hostname, site.allowed_domain)
-  );
+  const allowed = (data ?? []).some((site) => isAllowedDomain(hostname, site.allowed_domain));
 
   if (!allowed) {
     return NextResponse.json(
-      { authorized: false, message: "Unauthorized domain." },
-      { headers: corsHeaders }
+      { authorized: false, message: 'Unauthorized domain.' },
+      { headers: corsHeaders },
     );
   }
 
   const token = await signWidgetToken(tenantId, originHeader);
 
-  return NextResponse.json(
-    { authorized: true, message: "", token },
-    { headers: corsHeaders }
-  );
+  return NextResponse.json({ authorized: true, message: '', token }, { headers: corsHeaders });
 }

@@ -1,5 +1,5 @@
-create or replace function reopen_conversation_on_visitor_message()
-returns trigger as $$
+create
+or replace function reopen_conversation_on_visitor_message () returns trigger as $$
 begin
   if new.sender_type = 'visitor' then
     update conversations
@@ -11,9 +11,14 @@ begin
 end;
 $$ language plpgsql;
 
-drop trigger if exists messages_reopen_conversation on messages;
-create trigger messages_reopen_conversation
-  after insert on messages
-  for each row
-  execute function reopen_conversation_on_visitor_message();
 
+drop trigger
+  if exists messages_reopen_conversation on messages;
+
+
+create trigger
+  messages_reopen_conversation
+after
+  insert on messages for each row
+execute
+  function reopen_conversation_on_visitor_message ();

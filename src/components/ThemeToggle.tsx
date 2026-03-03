@@ -1,27 +1,27 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
-const THEME_STORAGE_KEY = "chat_widget_theme";
+const THEME_STORAGE_KEY = 'chat_widget_theme';
 
-type Theme = "dark" | "light";
+type Theme = 'dark' | 'light';
 
 function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme;
 }
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>('dark');
 
   useEffect(() => {
     const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-    const nextTheme = stored ?? "dark";
+    const nextTheme = stored ?? 'dark';
     setTheme(nextTheme);
     applyTheme(nextTheme);
   }, []);
 
   const toggleTheme = () => {
-    const nextTheme: Theme = theme === "dark" ? "light" : "dark";
+    const nextTheme: Theme = theme === 'dark' ? 'light' : 'dark';
     setTheme(nextTheme);
     localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
     applyTheme(nextTheme);
@@ -35,7 +35,7 @@ export default function ThemeToggle() {
       aria-label="Toggle theme"
       title="Toggle theme"
     >
-      {theme === "dark" ? "Light" : "Dark"}
+      {theme === 'dark' ? 'Light' : 'Dark'}
     </button>
   );
 }

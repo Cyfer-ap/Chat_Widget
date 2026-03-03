@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   --background: #ffffff;
@@ -28,7 +28,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-[data-theme="dark"] {
+[data-theme='dark'] {
   --background: #0b0f19;
   --foreground: #e5e7eb;
   --card: #0f172a;
@@ -42,8 +42,8 @@
 }
 
 body {
-  background: radial-gradient(circle at top, rgba(99, 102, 241, 0.06), transparent 45%),
-    var(--background);
+  background:
+    radial-gradient(circle at top, rgba(99, 102, 241, 0.06), transparent 45%), var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   line-height: 1.5;

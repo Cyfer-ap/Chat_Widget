@@ -6,13 +6,13 @@ A copy-paste live chat widget for any website plus an agent dashboard to handle 
 
 ## What is included
 
-| Area | Route / File |
-|---|---|
-| Widget (visitor side) | `/widget` — loads inside an iframe |
-| Agent login | `/login` |
-| Agent inbox | `/dashboard` |
-| Conversation view | `/dashboard/conversations/[id]` |
-| Embed loader script | `/public/widget.js` |
+| Area                  | Route / File                                    |
+| --------------------- | ----------------------------------------------- |
+| Widget (visitor side) | `/widget` — loads inside an iframe              |
+| Agent login           | `/login`                                        |
+| Agent inbox           | `/dashboard`                                    |
+| Conversation view     | `/dashboard/conversations/[id]`                 |
+| Embed loader script   | `/public/widget.js`                             |
 | Supabase schema & RLS | `/supabase/migrations/` and `/supabase/rls.sql` |
 
 ---
@@ -175,10 +175,10 @@ Any new visitor message         →  new ticket created automatically
 
 **Key thresholds (configurable in `src/app/widget/page.tsx`):**
 
-| Constant | Default | Meaning |
-|---|---|---|
-| `REOPEN_WINDOW_DAYS` | 7 | Visitor can reopen a resolved ticket within this window |
-| `NEW_TICKET_AFTER_DAYS` | 14 | After this many days, a new ticket is always created |
+| Constant                | Default | Meaning                                                 |
+| ----------------------- | ------- | ------------------------------------------------------- |
+| `REOPEN_WINDOW_DAYS`    | 7       | Visitor can reopen a resolved ticket within this window |
+| `NEW_TICKET_AFTER_DAYS` | 14      | After this many days, a new ticket is always created    |
 
 ---
 
@@ -186,18 +186,19 @@ Any new visitor message         →  new ticket created automatically
 
 All tables carry `tenant_id` for multi-tenant isolation.
 
-| Table | Key columns |
-|---|---|
-| `tenants` | `id`, `name`, `created_at` |
-| `tenant_sites` | `id`, `tenant_id`, `allowed_domain` |
-| `agents` | `id`, `tenant_id`, `user_id`, `role` |
-| `visitors` | `id`, `tenant_id`, `anon_id`, `last_seen` |
+| Table           | Key columns                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `tenants`       | `id`, `name`, `created_at`                                                                                               |
+| `tenant_sites`  | `id`, `tenant_id`, `allowed_domain`                                                                                      |
+| `agents`        | `id`, `tenant_id`, `user_id`, `role`                                                                                     |
+| `visitors`      | `id`, `tenant_id`, `anon_id`, `last_seen`                                                                                |
 | `conversations` | `id`, `tenant_id`, `visitor_id`, `status`, `subject`, `created_at`, `last_message_at`, `last_activity_at`, `resolved_at` |
-| `messages` | `id`, `tenant_id`, `conversation_id`, `sender_type`, `body`, `created_at` |
+| `messages`      | `id`, `tenant_id`, `conversation_id`, `sender_type`, `body`, `created_at`                                                |
 
 **Conversation statuses:** `open` → `pending` → `resolved` → `closed`
 
 **DB triggers (migration 0004):**
+
 - `messages_set_last_message_at` — updates `last_message_at` and `last_activity_at` on every new message.
 - `conversations_set_resolved_at` — stamps `resolved_at` when status changes to `resolved`; clears it on reopen.
 - `messages_reopen_conversation` — automatically reopens a `resolved` or `pending` conversation when a visitor sends a new message.

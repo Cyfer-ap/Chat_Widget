@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { getSupabaseClient } from "@/lib/supabaseClient";
+import { useEffect, useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 
 export function useSupabaseAuth() {
   const [session, setSession] = useState<Session | null>(null);
@@ -20,11 +20,9 @@ export function useSupabaseAuth() {
       setLoading(false);
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(
-      (_event, nextSession) => {
-        setSession(nextSession ?? null);
-      }
-    );
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession ?? null);
+    });
 
     return () => {
       subscription?.subscription.unsubscribe();
@@ -33,4 +31,3 @@ export function useSupabaseAuth() {
 
   return { session, loading };
 }
-

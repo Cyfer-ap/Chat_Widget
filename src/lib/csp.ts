@@ -15,6 +15,5 @@ export function buildFrameAncestorsCsp(ancestors: string[]): string {
     return "frame-ancestors 'none';";
   }
 
-  return `frame-ancestors ${normalized.join(" ")};`;
+  return `frame-ancestors ${normalized.join(' ')};`;
 }
-

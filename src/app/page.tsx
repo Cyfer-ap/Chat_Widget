@@ -1,13 +1,11 @@
-import Link from "next/link";
+import Link from 'next/link';
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-16">
       <main className="mx-auto flex max-w-3xl flex-col gap-6">
         <div>
-          <h1 className="text-3xl font-semibold text-zinc-900">
-            Dynamic Chat Widget
-          </h1>
+          <h1 className="text-3xl font-semibold text-zinc-900">Dynamic Chat Widget</h1>
           <p className="mt-2 text-base text-zinc-600">
             Copy-paste live chat widget with a Supabase-backed agent dashboard.
           </p>
@@ -36,7 +34,8 @@ export default function Home() {
           <p>
             Embed snippet:
             <code className="mt-2 block rounded bg-zinc-100 p-3 text-xs text-zinc-700">
-:               {`<script src="https://your-app.com/widget.js" data-tenant="YOUR_TENANT_ID" data-host="https://your-app.com"></script>`}
+              :{' '}
+              {`<script src="https://your-app.com/widget.js" data-tenant="YOUR_TENANT_ID" data-host="https://your-app.com"></script>`}
             </code>
           </p>
         </div>
