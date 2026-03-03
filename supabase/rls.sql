@@ -18,7 +18,6 @@ drop policy if exists "Visitors can insert their visitor record" on visitors;
 drop policy if exists "Visitors can insert conversations" on conversations;
 drop policy if exists "Visitors can read their conversations" on conversations;
 drop policy if exists "Visitors can read their messages" on messages;
-drop policy if exists "Visitors can insert messages" on messages;
 
 create policy "Agents can read tenant data"
   on tenants for select
@@ -133,15 +132,8 @@ create policy "Visitors can read their messages"
     )
   );
 
-create policy "Visitors can insert messages"
-  on messages for insert
-  with check (
-    exists (
-      select 1
-      from conversations
-      join visitors on visitors.id = conversations.visitor_id
-      where conversations.id = messages.conversation_id
-        and conversations.tenant_id = messages.tenant_id
-        and visitors.anon_id = auth.uid()::text
-    )
-  );
+-- Removed create policy "Visitors can insert messages" to prevent visitors from
+-- directly inserting messages using the public anon key. All visitor message
+-- writes must go through server routes protected by verifyWidgetToken(), which
+-- apply token validation, server-side rate limiting, and closed-conversation
+-- enforcement. Keeping this policy would allow bypassing those protections.
