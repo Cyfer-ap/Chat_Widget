@@ -28,7 +28,7 @@ This repository includes migration scripts, CI workflows, formatting tooling, an
 
 4. Tests
    - Unit tests added: `tests/cors.test.ts` (CORS helpers)
-   - Integration tests added (skip unless SUPABASE_* env vars set):
+   - Integration tests added (skip unless SUPABASE\_\* env vars set):
      - `tests/messages_rls.test.ts` — ensures anonymous insert into messages is rejected.
      - `tests/messages_closed_conversation.test.ts` — ensures DB trigger prevents inserts into closed conversations.
 
@@ -118,6 +118,7 @@ node --test --import tsx tests/cors.test.ts
 ## CI (GitHub Actions)
 
 Workflows added:
+
 - `ci.yml` — runs on push/PR to `main`. Steps:
   - npm ci
   - npm run format:check
@@ -129,6 +130,7 @@ Workflows added:
 - `apply-migrations.yml` — manual workflow to apply SQL migrations (requires `SUPABASE_DB_URL` secret).
 
 Add repository secrets for integration tests/production use:
+
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -168,10 +170,10 @@ Add repository secrets for integration tests/production use:
 ---
 
 If you'd like, I can:
+
 - Push these changes to a branch and open a PR with the explanation and CI checks enabled.
 - Add Husky + lint-staged pre-commit hooks so developers don't open PRs with unformatted code.
 - Wire Sentry or another error monitoring provider so server errors get reported automatically.
 - Expand the admin UI with tenant search, audit log viewer, and invite flow pages.
 
 Tell me which of these you'd like me to implement next and I will proceed.
-
