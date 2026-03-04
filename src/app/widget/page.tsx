@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -87,9 +87,9 @@ function WidgetContent() {
   const conversationSelect = CONVERSATION_SELECT;
 
   /**
-   * ✅ NEW: lock token refresh postMessage to the actual parent origin.
+   * âœ… NEW: lock token refresh postMessage to the actual parent origin.
    * We derive parent origin from document.referrer (embedding page URL).
-   * If referrer is empty (strict Referrer-Policy), token refresh via postMessage won’t work,
+   * If referrer is empty (strict Referrer-Policy), token refresh via postMessage wonâ€™t work,
    * but the initial token still works until expiry.
    */
   const expectedParentOrigin = useMemo(() => {
@@ -136,13 +136,13 @@ function WidgetContent() {
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // ✅ Reject token updates if we can't confidently identify the parent origin
+      // âœ… Reject token updates if we can't confidently identify the parent origin
       if (!expectedParentOrigin) return;
 
-      // ✅ Only accept messages from the embedding parent origin
+      // âœ… Only accept messages from the embedding parent origin
       if (event.origin !== expectedParentOrigin) return;
 
-      // ✅ Only accept messages that actually come from the parent window
+      // âœ… Only accept messages that actually come from the parent window
       if (event.source !== window.parent) return;
 
       const data = event.data as unknown;
@@ -608,7 +608,7 @@ function WidgetContent() {
                     aria-label="Back to current conversation"
                     title="Back to current"
                   >
-                    ×
+                    Ã—
                   </button>
                 ) : null}
                 <ThemeToggle />
@@ -618,7 +618,7 @@ function WidgetContent() {
                   onClick={() => setOpen(false)}
                   aria-label="Close chat"
                 >
-                  ×
+                  Ã—
                 </button>
               </div>
             </div>
@@ -735,12 +735,12 @@ function WidgetContent() {
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {activeConversation?.status === 'resolved' && !isViewingPrevious ? (
                   <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-700">
-                    ✅ Resolved — reply to reopen
+                    âœ… Resolved â€” reply to reopen
                   </span>
                 ) : null}
                 {activeConversation?.status === 'closed' && !isViewingPrevious ? (
                   <span className="rounded-full bg-zinc-200 px-3 py-1 font-semibold text-zinc-700">
-                    Closed — a new conversation will start on reply
+                    Closed â€” a new conversation will start on reply
                   </span>
                 ) : null}
                 {isViewingPrevious ? (
@@ -815,7 +815,7 @@ function WidgetContent() {
           aria-label={open ? 'Close chat' : 'Open chat'}
           aria-expanded={open}
         >
-          {open ? '×' : 'Chat'}
+          {open ? 'Ã—' : 'Chat'}
           {unreadCount > 0 ? (
             <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[color:var(--accent)] px-1 text-[11px] font-semibold text-[color:var(--accent-foreground)]">
               {unreadCount}
