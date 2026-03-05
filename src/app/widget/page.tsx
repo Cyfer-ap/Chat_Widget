@@ -415,18 +415,6 @@ function WidgetContent() {
     loadViewingMessages();
   }, [authorized, supabase, viewingConversationId]);
 
-  // Notify the parent iframe to resize when the chat opens or closes.
-  useEffect(() => {
-    try {
-      if (window.parent && window.parent !== window) {
-        const target = expectedParentOrigin ?? '*';
-        window.parent.postMessage({ type: 'widget-resize', open }, target);
-      }
-    } catch {
-      // Cross-origin postMessage failures are non-fatal.
-    }
-  }, [open, expectedParentOrigin]);
-
   useEffect(() => {
     if (!open || !conversationId) return;
     const lastReadAt = localStorage.getItem(getLastReadKey(conversationId));
@@ -591,8 +579,12 @@ function WidgetContent() {
   }
 
   return (
-    <div className="pointer-events-none">
-      <div className="fixed bottom-4 right-4 flex flex-col items-end gap-2 pointer-events-none">
+    <div className={open ? 'h-screen w-screen bg-transparent' : 'pointer-events-none'}>
+      <div
+        className={`fixed bottom-4 right-4 flex flex-col items-end gap-2 ${
+          open ? 'pointer-events-auto' : 'pointer-events-none'
+        }`}
+      >
         {open ? (
           <div className="pointer-events-auto flex h-[70vh] w-[90vw] max-w-[360px] flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] shadow-2xl ring-1 ring-black/5 sm:h-[480px] sm:w-[320px]">
             <div className="flex items-center justify-between bg-gradient-to-r from-[color:var(--primary)] to-zinc-800 px-4 py-3 text-[color:var(--primary-foreground)]">
